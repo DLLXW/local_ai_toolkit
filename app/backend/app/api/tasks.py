@@ -17,6 +17,27 @@ from app.services.task_store import TaskStore
 router = APIRouter(tags=["tasks"])
 
 
+def _resolve_asset_base_url(settings: Settings, doc_name: str) -> str | None:
+    doc_dir = settings.outputs_dir / doc_name
+    if not doc_dir.exists():
+        return None
+
+    direct_imgs = doc_dir / "imgs"
+    if direct_imgs.exists():
+        return f"/static/outputs/{doc_name}/imgs"
+
+    candidates = sorted(
+        [path for path in doc_dir.rglob("imgs") if path.is_dir()],
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    if not candidates:
+        return None
+
+    relative = candidates[0].relative_to(settings.outputs_dir).as_posix()
+    return f"/static/outputs/{relative}"
+
+
 @router.get("/tasks", response_model=TaskListResponse)
 async def list_tasks(settings: Settings = Depends(get_settings)) -> TaskListResponse:
     store = TaskStore(settings.tasks_file)
@@ -70,7 +91,9 @@ async def get_document_result(
     if not result_path.exists():
         raise HTTPException(status_code=404, detail="Document result not found")
 
-    return DocumentResultResponse.model_validate_json(result_path.read_text(encoding="utf-8"))
+    result = DocumentResultResponse.model_validate_json(result_path.read_text(encoding="utf-8"))
+    result.asset_base_url = _resolve_asset_base_url(settings, doc_name)
+    return result
 
 
 @router.get("/result/{doc_name}/{mode}", response_model=DocumentViewResponse)

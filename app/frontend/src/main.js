@@ -2,7 +2,7 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 
 const API_BASE = "http://localhost:8000/api";
-const STATIC_OUTPUTS_BASE = "http://localhost:8000/static/outputs";
+const BACKEND_ORIGIN = new URL(API_BASE).origin;
 
 marked.setOptions({
   gfm: true,
@@ -11,6 +11,8 @@ marked.setOptions({
 
 const healthStatus = document.querySelector("#healthStatus");
 const taskList = document.querySelector("#taskList");
+const taskFilters = document.querySelector("#taskFilters");
+const taskCountBadge = document.querySelector("#taskCountBadge");
 const refreshTasksButton = document.querySelector("#refreshTasksButton");
 const translateInput = document.querySelector("#translateInput");
 const translateDirection = document.querySelector("#translateDirection");
@@ -31,6 +33,8 @@ let currentTaskId = null;
 let currentDocName = null;
 let currentMode = "bilingual";
 let currentResult = null;
+let allTasks = [];
+let currentFilter = "all";
 const searchParams = new URLSearchParams(window.location.search);
 
 async function fetchJson(url, options) {
@@ -51,26 +55,69 @@ async function refreshHealth() {
   }
 }
 
+function getFilteredTasks(items) {
+  if (currentFilter === "all") return items;
+  return items.filter((task) => task.status === currentFilter);
+}
+
+function renderFilters(items) {
+  const groups = [
+    { id: "all", label: "全部文稿", count: items.length },
+    { id: "done", label: "已完成", count: items.filter((item) => item.status === "done").length },
+    {
+      id: "running",
+      label: "处理中",
+      count: items.filter((item) => ["running", "queued"].includes(item.status)).length,
+    },
+    {
+      id: "failed",
+      label: "失败记录",
+      count: items.filter((item) => item.status === "failed").length,
+    },
+  ];
+
+  taskFilters.innerHTML = groups
+    .map(
+      (group) => `
+        <button class="task-filter${group.id === currentFilter ? " active" : ""}" type="button" data-filter="${group.id}">
+          <span>${group.label}</span>
+          <span class="task-filter-count">${group.count}</span>
+        </button>
+      `,
+    )
+    .join("");
+}
+
+function taskStatusClass(status) {
+  return ["done", "failed", "running", "queued"].includes(status) ? status : "";
+}
+
 function renderTaskList(items) {
-  if (!items.length) {
-    taskList.innerHTML = '<div class="task-item-meta">还没有任务，先上传一份文档试试。</div>';
+  const filtered = getFilteredTasks(items);
+  taskCountBadge.textContent = String(filtered.length);
+
+  if (!filtered.length) {
+    taskList.innerHTML = '<div class="plain-output">当前筛选条件下还没有文档。</div>';
     return;
   }
 
-  taskList.innerHTML = items
+  taskList.innerHTML = filtered
     .map((task) => {
       const activeClass = task.id === currentTaskId ? " active" : "";
       return `
         <article class="task-item${activeClass}">
-          <strong>${escapeHtml(task.title)}</strong>
+          <div class="task-item-top">
+            <strong>${escapeHtml(task.title)}</strong>
+            <span class="task-status-pill ${taskStatusClass(task.status)}">${escapeHtml(task.status)}</span>
+          </div>
           <div class="task-item-meta">
-            状态: ${escapeHtml(task.status)} · 进度: ${Math.round((task.progress || 0) * 100)}%<br/>
-            阶段: ${escapeHtml(task.step || "-")}<br/>
-            文档: ${escapeHtml(task.doc_name || task.input_filename || "-")}
+            <div>文档: ${escapeHtml(task.doc_name || task.input_filename || "-")}</div>
+            <div>阶段: ${escapeHtml(task.step || "-")}</div>
+            <div>进度: ${Math.round((task.progress || 0) * 100)}%</div>
           </div>
           <div class="task-item-actions">
-            <button data-open-task="${task.id}">打开</button>
-            <button class="secondary" data-delete-task="${task.id}">删除</button>
+            <button class="task-action" type="button" data-open-task="${task.id}">打开</button>
+            <button class="danger-action" type="button" data-delete-task="${task.id}">删除</button>
           </div>
         </article>
       `;
@@ -81,9 +128,11 @@ function renderTaskList(items) {
 async function refreshTasks() {
   try {
     const payload = await fetchJson(`${API_BASE}/tasks`);
-    renderTaskList(payload.items);
+    allTasks = payload.items;
+    renderFilters(allTasks);
+    renderTaskList(allTasks);
   } catch (error) {
-    taskList.innerHTML = `<div class="task-item-meta">任务列表加载失败: ${escapeHtml(error.message)}</div>`;
+    taskList.innerHTML = `<div class="plain-output">任务列表加载失败: ${escapeHtml(error.message)}</div>`;
   }
 }
 
@@ -108,7 +157,7 @@ function renderTaskStatus(task) {
       </div>
     </div>
     <div class="progress-bar"><span style="width:${Math.round((task.progress || 0) * 100)}%"></span></div>
-    ${task.error ? `<div class="hint" style="margin-top:14px;">失败原因: ${escapeHtml(task.error)}</div>` : ""}
+    ${task.error ? `<div class="hint-inline">失败原因: ${escapeHtml(task.error)}</div>` : ""}
   `;
 }
 
@@ -119,27 +168,33 @@ function sanitizeHtml(html) {
   });
 }
 
-function normalizeAssetPaths(html, docName) {
-  if (!docName) return html;
-  const docBase = `${STATIC_OUTPUTS_BASE}/${encodeURIComponent(docName)}`;
+function normalizeAssetPaths(html, result) {
+  const assetBaseUrl = result?.asset_base_url
+    ? `${BACKEND_ORIGIN}${result.asset_base_url}`
+    : result?.doc_name
+      ? `${BACKEND_ORIGIN}/static/outputs/${encodeURIComponent(result.doc_name)}/imgs`
+      : "";
+
+  if (!assetBaseUrl) return html;
+
   return html
-    .replaceAll('src="imgs/', `src="${docBase}/imgs/`)
-    .replaceAll("src='imgs/", `src='${docBase}/imgs/`)
-    .replaceAll('src="./imgs/', `src="${docBase}/imgs/`)
-    .replaceAll("src='./imgs/", `src='${docBase}/imgs/`)
-    .replaceAll('href="imgs/', `href="${docBase}/imgs/`)
-    .replaceAll("href='imgs/", `href='${docBase}/imgs/`)
-    .replaceAll('href="./imgs/', `href="${docBase}/imgs/`)
-    .replaceAll("href='./imgs/", `href='${docBase}/imgs/`);
+    .replaceAll('src="imgs/', `src="${assetBaseUrl}/`)
+    .replaceAll("src='imgs/", `src='${assetBaseUrl}/`)
+    .replaceAll('src="./imgs/', `src="${assetBaseUrl}/`)
+    .replaceAll("src='./imgs/", `src='${assetBaseUrl}/`)
+    .replaceAll('href="imgs/', `href="${assetBaseUrl}/`)
+    .replaceAll("href='imgs/", `href='${assetBaseUrl}/`)
+    .replaceAll('href="./imgs/', `href="${assetBaseUrl}/`)
+    .replaceAll("href='./imgs/", `href='${assetBaseUrl}/`);
 }
 
-function renderMarkdownToHtml(markdown, docName) {
+function renderMarkdownToHtml(markdown, result) {
   const rawHtml = marked.parse(markdown || "");
-  return normalizeAssetPaths(sanitizeHtml(rawHtml), docName);
+  return normalizeAssetPaths(sanitizeHtml(rawHtml), result);
 }
 
-function renderRichContent(container, markdown, docName) {
-  container.innerHTML = `<div class="rendered-doc">${renderMarkdownToHtml(markdown, docName)}</div>`;
+function renderRichContent(container, markdown, result) {
+  container.innerHTML = `<div class="rendered-doc">${renderMarkdownToHtml(markdown, result)}</div>`;
 }
 
 function splitMarkdownBlocks(markdown) {
@@ -263,7 +318,7 @@ function renderBilingualResult(container, result) {
         return `
           <section class="bilingual-raw">
             <div class="bilingual-label">Shared Block</div>
-            <div class="rendered-doc">${renderMarkdownToHtml(segment.source, result.doc_name)}</div>
+            <div class="rendered-doc">${renderMarkdownToHtml(segment.source, result)}</div>
           </section>
         `;
       }
@@ -272,11 +327,11 @@ function renderBilingualResult(container, result) {
         <section class="bilingual-pair">
           <div class="bilingual-col">
             <div class="bilingual-label">English</div>
-            <div class="rendered-doc">${renderMarkdownToHtml(segment.source, result.doc_name)}</div>
+            <div class="rendered-doc">${renderMarkdownToHtml(segment.source, result)}</div>
           </div>
           <div class="bilingual-col">
             <div class="bilingual-label">中文</div>
-            <div class="rendered-doc">${renderMarkdownToHtml(segment.target, result.doc_name)}</div>
+            <div class="rendered-doc">${renderMarkdownToHtml(segment.target, result)}</div>
           </div>
         </section>
       `;
@@ -288,14 +343,20 @@ function renderBilingualResult(container, result) {
 
 function renderCurrentResult() {
   if (!currentResult) {
-    resultOutput.innerHTML = "";
+    resultOutput.innerHTML = `
+      <div class="reader-empty">
+        <div class="reader-empty-icon">📖</div>
+        <h3>准备就绪</h3>
+        <p>上传文档开始 OCR 解析与翻译，或从左侧历史记录中选择一份结果继续阅读。</p>
+      </div>
+    `;
     return;
   }
 
   if (currentMode === "english") {
-    renderRichContent(resultOutput, currentResult.english_markdown, currentResult.doc_name);
+    renderRichContent(resultOutput, currentResult.english_markdown, currentResult);
   } else if (currentMode === "chinese") {
-    renderRichContent(resultOutput, currentResult.chinese_markdown, currentResult.doc_name);
+    renderRichContent(resultOutput, currentResult.chinese_markdown, currentResult);
   } else {
     renderBilingualResult(resultOutput, currentResult);
   }
@@ -356,7 +417,7 @@ ocrButton.addEventListener("click", async () => {
       method: "POST",
       body: formData,
     });
-    renderRichContent(ocrOutput, payload.markdown, "");
+    renderRichContent(ocrOutput, payload.markdown, null);
   } catch (error) {
     ocrOutput.innerHTML = `<div class="plain-output">请求失败: ${escapeHtml(error.message)}</div>`;
   }
@@ -368,7 +429,9 @@ docButton.addEventListener("click", async () => {
     return;
   }
   taskMeta.textContent = "上传中...";
-  resultOutput.innerHTML = "";
+  currentResult = null;
+  renderCurrentResult();
+
   const formData = new FormData();
   formData.append("file", docFile.files[0]);
   try {
@@ -377,7 +440,7 @@ docButton.addEventListener("click", async () => {
       body: formData,
     });
     currentTaskId = payload.task.id;
-    taskMeta.textContent = `任务 ${payload.task.id} 已创建`;
+    taskMeta.textContent = `任务 ${payload.task.id} 已创建，正在解析...`;
     await pollTask(payload.task.id);
   } catch (error) {
     taskMeta.textContent = `请求失败: ${error.message}`;
@@ -426,14 +489,25 @@ taskList.addEventListener("click", async (event) => {
         currentDocName = null;
         currentResult = null;
         taskOutput.innerHTML = "";
-        resultOutput.innerHTML = "";
-        readerMeta.textContent = "选择一个任务即可查看结果。";
+        renderCurrentResult();
+        readerMeta.textContent = "从左侧文档列表中打开一个任务，即可在这里阅读结果。";
       }
       await refreshTasks();
     } catch (error) {
       taskMeta.textContent = `删除失败: ${error.message}`;
     }
   }
+});
+
+taskFilters.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  const button = target.closest("[data-filter]");
+  if (!(button instanceof HTMLElement)) return;
+
+  currentFilter = button.dataset.filter || "all";
+  renderFilters(allTasks);
+  renderTaskList(allTasks);
 });
 
 refreshTasksButton.addEventListener("click", () => {
@@ -484,4 +558,6 @@ if (initialTaskId) {
   loadResult(initialDocName).catch((error) => {
     readerMeta.textContent = `结果加载失败: ${error.message}`;
   });
+} else {
+  renderCurrentResult();
 }

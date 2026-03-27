@@ -8,65 +8,112 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside class="sidebar">
+      <aside class="global-sidebar">
         <div class="brand">
-          <div class="brand-mark">L</div>
+          <div class="brand-mark">AI</div>
           <div>
-            <div class="brand-title">Local AI Workspace</div>
-            <div class="brand-subtitle">OCR + Translation + Reading</div>
+            <div class="brand-title">AI Toolkit</div>
+            <div class="brand-subtitle">OCR + Translation + Reader</div>
           </div>
         </div>
 
-        <div class="sidebar-card status-card">
+        <nav class="nav-list">
+          <button class="nav-item active" type="button">
+            <span class="nav-icon">📚</span>
+            <span>文献阅读神经元</span>
+          </button>
+          <button class="nav-item" type="button">
+            <span class="nav-icon">🔎</span>
+            <span>OCR 识别</span>
+          </button>
+          <button class="nav-item" type="button">
+            <span class="nav-icon">🌐</span>
+            <span>翻译器</span>
+          </button>
+        </nav>
+
+        <section class="backend-card">
           <div class="section-kicker">Backend</div>
           <div id="healthStatus" class="status-value">Checking...</div>
+          <p class="muted-copy">本地 OCR 与翻译服务已接入，处理结果会自动归档到左侧文档列表。</p>
+        </section>
+      </aside>
+
+      <aside class="document-rail">
+        <div class="rail-head">
+          <div>
+            <div class="section-kicker">Workspace</div>
+            <h2>文件夹</h2>
+          </div>
+          <button id="refreshTasksButton" class="icon-button" type="button">↻</button>
         </div>
 
-        <div class="sidebar-card task-card">
-          <div class="task-card-head">
-            <div>
-              <div class="section-kicker">History</div>
-              <h2>任务列表</h2>
-            </div>
-            <button id="refreshTasksButton" class="ghost-button">刷新</button>
-          </div>
-          <div id="taskList" class="task-list"></div>
+        <div id="taskFilters" class="task-filters"></div>
+
+        <div class="rail-subhead">
+          <span>文档列表</span>
+          <span id="taskCountBadge" class="count-badge">0</span>
         </div>
+        <div id="taskList" class="task-list"></div>
       </aside>
 
       <main class="workspace">
-        <section class="hero">
-          <div class="hero-copy">
-            <div class="section-kicker">Document Studio</div>
-            <h1>把本地 OCR、翻译和双语阅读放进一个工作台</h1>
-            <p>
-              左侧看任务，右侧上传、翻译和阅读。文档结果会按 markdown 与 html
-              混合内容进行渲染，适合论文、表格和技术文档。
+        <header class="workspace-head">
+          <div>
+            <div class="section-kicker">Reader Workspace</div>
+            <h1>文献阅读神经元</h1>
+            <p class="hero-copy">
+              上传 PDF 或图片，自动完成 OCR、英译中，并在下方阅读器里切换 English / 中文 / 双语结果。
             </p>
           </div>
+          <button class="focus-pill" type="button">专注文档</button>
+        </header>
+
+        <section class="composer-card">
+          <div class="composer-toolbar">
+            <label class="segmented-upload" for="docFile">
+              <span>📁</span>
+              <span>上传文件</span>
+            </label>
+            <div class="link-chip disabled">
+              <span>🔗</span>
+              <span>论文链接</span>
+            </div>
+          </div>
+
+          <div class="composer-grid">
+            <div class="dropzone-card">
+              <input id="docFile" type="file" accept=".pdf,.png,.jpg,.jpeg" />
+              <div class="dropzone-illustration">🗂</div>
+              <div class="dropzone-title">拖拽文档到这里，或点击上方按钮选择</div>
+              <div class="dropzone-note">支持 PDF、PNG、JPG、JPEG。上传后会自动进入 OCR 与翻译流程。</div>
+            </div>
+
+            <button id="docButton" class="launch-button" type="button">开始解析</button>
+          </div>
+
+          <div id="taskMeta" class="hint-inline">选择一个历史任务，或上传一个新文档开始处理。</div>
+          <div id="taskOutput" class="task-status"></div>
         </section>
 
-        <section class="tool-grid">
-          <article class="panel upload-panel">
-            <div class="panel-head">
+        <section class="utility-grid">
+          <article class="utility-card">
+            <div class="utility-head">
               <div>
-                <div class="section-kicker">Pipeline</div>
-                <h2>文档翻译任务</h2>
+                <div class="section-kicker">Quick OCR</div>
+                <h3>独立识别</h3>
               </div>
             </div>
-            <div class="upload-row">
-              <input id="docFile" type="file" accept=".pdf,.png,.jpg,.jpeg" />
-              <button id="docButton">上传并开始任务</button>
-            </div>
-            <div id="taskMeta" class="hint"></div>
-            <div id="taskOutput" class="task-status"></div>
+            <input id="ocrFile" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf" />
+            <button id="ocrButton" class="soft-button" type="button">上传识别</button>
+            <div id="ocrOutput" class="plain-output compact-output"></div>
           </article>
 
-          <article class="panel translate-panel">
-            <div class="panel-head">
+          <article class="utility-card">
+            <div class="utility-head">
               <div>
-                <div class="section-kicker">Quick Tool</div>
-                <h2>独立翻译</h2>
+                <div class="section-kicker">Quick Translate</div>
+                <h3>独立翻译</h3>
               </div>
             </div>
             <textarea id="translateInput" placeholder="输入英文或中文"></textarea>
@@ -75,38 +122,32 @@
                 <option value="en2zh">英文 -> 中文</option>
                 <option value="zh2en">中文 -> 英文</option>
               </select>
-              <button id="translateButton">立即翻译</button>
+              <button id="translateButton" class="soft-button" type="button">立即翻译</button>
             </div>
-            <div id="translateOutput" class="plain-output"></div>
-          </article>
-
-          <article class="panel ocr-panel">
-            <div class="panel-head">
-              <div>
-                <div class="section-kicker">Quick Tool</div>
-                <h2>独立 OCR</h2>
-              </div>
-            </div>
-            <input id="ocrFile" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf" />
-            <button id="ocrButton">上传识别</button>
-            <div id="ocrOutput" class="reader-surface compact"></div>
+            <div id="translateOutput" class="plain-output compact-output"></div>
           </article>
         </section>
 
-        <section class="reader-panel panel">
-          <div class="panel-head reader-head">
+        <section class="reader-card">
+          <div class="reader-head">
             <div>
-              <div class="section-kicker">Reader</div>
+              <div class="section-kicker">Document View</div>
               <h2>阅读结果</h2>
             </div>
             <div class="reader-actions">
-              <button data-mode="english" class="mode-button">English</button>
-              <button data-mode="chinese" class="mode-button">中文</button>
-              <button data-mode="bilingual" class="mode-button active">双语</button>
+              <button data-mode="english" class="mode-button" type="button">English</button>
+              <button data-mode="chinese" class="mode-button" type="button">中文</button>
+              <button data-mode="bilingual" class="mode-button active" type="button">双语</button>
             </div>
           </div>
-          <div id="readerMeta" class="hint">选择一个任务即可查看结果。</div>
-          <div id="resultOutput" class="reader-surface"></div>
+          <div id="readerMeta" class="hint-inline">从左侧文档列表中打开一个任务，即可在这里阅读结果。</div>
+          <div id="resultOutput" class="reader-surface">
+            <div class="reader-empty">
+              <div class="reader-empty-icon">📖</div>
+              <h3>准备就绪</h3>
+              <p>上传文档开始 OCR 解析与翻译，或从左侧历史记录中选择一份结果继续阅读。</p>
+            </div>
+          </div>
         </section>
       </main>
     </div>
