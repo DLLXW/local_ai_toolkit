@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+
+glm-ocr/
+glm-ocr-mlx-server/
+
+.env
+app/.venv/
+app/backend/.venv/
+app/backend/.env
+app/backend/data/
+app/frontend/node_modules/
+app/frontend/dist/

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Local AI Workspace</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">L</div>
+          <div>
+            <div class="brand-title">Local AI Workspace</div>
+            <div class="brand-subtitle">OCR + Translation + Reading</div>
+          </div>
+        </div>
+
+        <div class="sidebar-card status-card">
+          <div class="section-kicker">Backend</div>
+          <div id="healthStatus" class="status-value">Checking...</div>
+        </div>
+
+        <div class="sidebar-card task-card">
+          <div class="task-card-head">
+            <div>
+              <div class="section-kicker">History</div>
+              <h2>任务列表</h2>
+            </div>
+            <button id="refreshTasksButton" class="ghost-button">刷新</button>
+          </div>
+          <div id="taskList" class="task-list"></div>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <section class="hero">
+          <div class="hero-copy">
+            <div class="section-kicker">Document Studio</div>
+            <h1>把本地 OCR、翻译和双语阅读放进一个工作台</h1>
+            <p>
+              左侧看任务，右侧上传、翻译和阅读。文档结果会按 markdown 与 html
+              混合内容进行渲染，适合论文、表格和技术文档。
+            </p>
+          </div>
+        </section>
+
+        <section class="tool-grid">
+          <article class="panel upload-panel">
+            <div class="panel-head">
+              <div>
+                <div class="section-kicker">Pipeline</div>
+                <h2>文档翻译任务</h2>
+              </div>
+            </div>
+            <div class="upload-row">
+              <input id="docFile" type="file" accept=".pdf,.png,.jpg,.jpeg" />
+              <button id="docButton">上传并开始任务</button>
+            </div>
+            <div id="taskMeta" class="hint"></div>
+            <div id="taskOutput" class="task-status"></div>
+          </article>
+
+          <article class="panel translate-panel">
+            <div class="panel-head">
+              <div>
+                <div class="section-kicker">Quick Tool</div>
+                <h2>独立翻译</h2>
+              </div>
+            </div>
+            <textarea id="translateInput" placeholder="输入英文或中文"></textarea>
+            <div class="toolbar">
+              <select id="translateDirection">
+                <option value="en2zh">英文 -> 中文</option>
+                <option value="zh2en">中文 -> 英文</option>
+              </select>
+              <button id="translateButton">立即翻译</button>
+            </div>
+            <div id="translateOutput" class="plain-output"></div>
+          </article>
+
+          <article class="panel ocr-panel">
+            <div class="panel-head">
+              <div>
+                <div class="section-kicker">Quick Tool</div>
+                <h2>独立 OCR</h2>
+              </div>
+            </div>
+            <input id="ocrFile" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf" />
+            <button id="ocrButton">上传识别</button>
+            <div id="ocrOutput" class="reader-surface compact"></div>
+          </article>
+        </section>
+
+        <section class="reader-panel panel">
+          <div class="panel-head reader-head">
+            <div>
+              <div class="section-kicker">Reader</div>
+              <h2>阅读结果</h2>
+            </div>
+            <div class="reader-actions">
+              <button data-mode="english" class="mode-button">English</button>
+              <button data-mode="chinese" class="mode-button">中文</button>
+              <button data-mode="bilingual" class="mode-button active">双语</button>
+            </div>
+          </div>
+          <div id="readerMeta" class="hint">选择一个任务即可查看结果。</div>
+          <div id="resultOutput" class="reader-surface"></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
