@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <div class="app-shell reader-layout" id="appShell">
       <aside class="global-sidebar">
         <div class="brand">
           <div class="brand-mark">AI</div>
@@ -58,6 +58,7 @@
       </aside>
 
       <main class="workspace">
+        <button id="readerEdgeHandle" class="edge-handle" type="button" aria-label="切换专注阅读">◂</button>
         <section class="module-panel active" data-module="reader">
           <header class="workspace-head">
             <div>
@@ -67,7 +68,6 @@
                 上传 PDF 或图片，自动完成 OCR、英译中，并在阅读器里切换 English / 中文 / 双语结果。
               </p>
             </div>
-            <button class="focus-pill" type="button">专注文档</button>
           </header>
 
           <section class="composer-card">

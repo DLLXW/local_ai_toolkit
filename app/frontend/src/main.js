@@ -5,6 +5,11 @@ import renderMathInElement from "katex/contrib/auto-render";
 
 const API_BASE = "http://localhost:8000/api";
 const BACKEND_ORIGIN = new URL(API_BASE).origin;
+const DISPLAY_MATH_PATTERN = /(?:^|\n)(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\])(?:\n|$)/g;
+const DISPLAY_MATH_FENCES = {
+  "$$": "$$",
+  "\\[": "\\]",
+};
 
 marked.setOptions({
   gfm: true,
@@ -12,6 +17,8 @@ marked.setOptions({
 });
 
 const healthStatus = document.querySelector("#healthStatus");
+const appShell = document.querySelector("#appShell");
+const readerEdgeHandle = document.querySelector("#readerEdgeHandle");
 const navButtons = [...document.querySelectorAll("[data-module-nav]")];
 const modulePanels = [...document.querySelectorAll("[data-module]")];
 const readerRail = document.querySelector('[data-module-panel="reader"]');
@@ -46,6 +53,7 @@ let allTasks = [];
 let currentFilter = "all";
 let currentModule = "reader";
 let isUploadingDocument = false;
+let isFocusMode = false;
 const searchParams = new URLSearchParams(window.location.search);
 
 async function fetchJson(url, options) {
@@ -70,6 +78,14 @@ function renderMath(container) {
   });
 }
 
+function setFocusMode(enabled) {
+  isFocusMode = enabled;
+  appShell.classList.toggle("focus-mode", enabled);
+  if (readerEdgeHandle) {
+    readerEdgeHandle.textContent = enabled ? "▸" : "◂";
+  }
+}
+
 function setModule(moduleName) {
   currentModule = moduleName;
   for (const button of navButtons) {
@@ -80,6 +96,11 @@ function setModule(moduleName) {
   }
   if (readerRail) {
     readerRail.classList.toggle("hidden", moduleName !== "reader");
+  }
+  appShell.classList.toggle("reader-layout", moduleName === "reader");
+  appShell.classList.toggle("single-layout", moduleName !== "reader");
+  if (moduleName !== "reader") {
+    setFocusMode(false);
   }
 }
 
@@ -204,6 +225,26 @@ function sanitizeHtml(html) {
   });
 }
 
+function extractDisplayMathBlocks(markdown) {
+  const placeholders = [];
+  const rewritten = String(markdown || "").replace(DISPLAY_MATH_PATTERN, (match, block) => {
+    const token = `MATHBLOCKTOKEN${placeholders.length}END`;
+    placeholders.push({ token, block: block.trim() });
+    return match.replace(block, token);
+  });
+  return { rewritten, placeholders };
+}
+
+function restoreDisplayMathBlocks(html, placeholders) {
+  let restored = html;
+  for (const { token, block } of placeholders) {
+    const replacement = `<div class="math-block">${escapeHtml(block)}</div>`;
+    restored = restored.replaceAll(`<p>${token}</p>`, replacement);
+    restored = restored.replaceAll(token, replacement);
+  }
+  return restored;
+}
+
 function normalizeAssetPaths(html, result) {
   const assetBaseUrl = result?.asset_base_url
     ? `${BACKEND_ORIGIN}${result.asset_base_url}`
@@ -225,8 +266,10 @@ function normalizeAssetPaths(html, result) {
 }
 
 function renderMarkdownToHtml(markdown, result) {
-  const rawHtml = marked.parse(markdown || "");
-  return normalizeAssetPaths(sanitizeHtml(rawHtml), result);
+  const { rewritten, placeholders } = extractDisplayMathBlocks(markdown || "");
+  const rawHtml = marked.parse(rewritten);
+  const restoredHtml = restoreDisplayMathBlocks(rawHtml, placeholders);
+  return normalizeAssetPaths(sanitizeHtml(restoredHtml), result);
 }
 
 function renderRichContent(container, markdown, result) {
@@ -240,6 +283,8 @@ function splitMarkdownBlocks(markdown) {
   let current = [];
   let inFence = false;
   let inHtmlTable = false;
+  let inMathBlock = false;
+  let mathCloser = "";
 
   const flushCurrent = () => {
     const block = current.join("\n").trim();
@@ -255,6 +300,16 @@ function splitMarkdownBlocks(markdown) {
       if (stripped.startsWith("```")) {
         flushCurrent();
         inFence = false;
+      }
+      continue;
+    }
+
+    if (inMathBlock) {
+      current.push(line);
+      if (stripped === mathCloser) {
+        flushCurrent();
+        inMathBlock = false;
+        mathCloser = "";
       }
       continue;
     }
@@ -277,6 +332,14 @@ function splitMarkdownBlocks(markdown) {
       flushCurrent();
       current.push(line);
       inFence = true;
+      continue;
+    }
+
+    if (stripped === "$$" || stripped === "\\[") {
+      flushCurrent();
+      current.push(line);
+      inMathBlock = true;
+      mathCloser = stripped === "$$" ? "$$" : "\\]";
       continue;
     }
 
@@ -348,7 +411,6 @@ function isStandaloneRawLine(line) {
   return (
     line.startsWith("|") ||
     line.includes("![](") ||
-    line.includes("$$") ||
     line.includes("\\[") ||
     line.includes("\\begin{")
   );
@@ -367,7 +429,75 @@ function isRawBlock(block) {
   );
 }
 
+function getMathFence(segment) {
+  const source = String(segment?.source || "").trim();
+  if (DISPLAY_MATH_FENCES[source]) {
+    return { opener: source, closer: DISPLAY_MATH_FENCES[source] };
+  }
+  return null;
+}
+
+function stripOuterDisplayMath(content) {
+  let normalized = String(content || "").trim();
+
+  for (const [opener, closer] of Object.entries(DISPLAY_MATH_FENCES)) {
+    if (normalized.startsWith(opener) && normalized.endsWith(closer)) {
+      normalized = normalized.slice(opener.length, normalized.length - closer.length).trim();
+      break;
+    }
+  }
+
+  return normalized;
+}
+
+function normalizeDisplayMathContent(content) {
+  return stripOuterDisplayMath(content)
+    .replace(/\$(\\tag\{[^}]+\})\$/g, "$1")
+    .replace(/\$([^$\n]+)\$/g, "$1")
+    .trim();
+}
+
+function wrapDisplayMath(content, opener = "$$", closer = "$$") {
+  const normalized = normalizeDisplayMathContent(content);
+  return `${opener}\n${normalized}\n${closer}`;
+}
+
+function normalizeBilingualSegments(segments) {
+  const normalized = [];
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const current = segments[index];
+    const fence = getMathFence(current);
+    const middle = segments[index + 1];
+    const tail = segments[index + 2];
+
+    if (
+      fence &&
+      middle &&
+      tail &&
+      String(tail?.source || "").trim() === fence.closer &&
+      (middle.kind === "text" || middle.kind === "raw")
+    ) {
+      normalized.push({
+        kind: "math",
+        source: wrapDisplayMath(middle.source, fence.opener, fence.closer),
+        target: wrapDisplayMath(middle.target || middle.source, fence.opener, fence.closer),
+      });
+      index += 2;
+      continue;
+    }
+
+    normalized.push(current);
+  }
+
+  return normalized;
+}
+
 function buildBilingualSegments(result) {
+  if (Array.isArray(result.segments) && result.segments.length > 0) {
+    return normalizeBilingualSegments(result.segments);
+  }
+
   const englishBlocks = splitMarkdownBlocks(result.english_markdown);
   const chineseBlocks = splitMarkdownBlocks(result.chinese_markdown);
 
@@ -396,6 +526,21 @@ function renderBilingualResult(container, result) {
           <section class="bilingual-raw">
             <div class="bilingual-label">Shared Block</div>
             <div class="rendered-doc">${renderMarkdownToHtml(segment.source, result)}</div>
+          </section>
+        `;
+      }
+
+      if (segment.kind === "math") {
+        return `
+          <section class="bilingual-pair formula-pair">
+            <div class="bilingual-col">
+              <div class="bilingual-label">English</div>
+              <div class="rendered-doc">${renderMarkdownToHtml(segment.source, result)}</div>
+            </div>
+            <div class="bilingual-col">
+              <div class="bilingual-label">中文</div>
+              <div class="rendered-doc">${renderMarkdownToHtml(segment.target, result)}</div>
+            </div>
           </section>
         `;
       }
@@ -663,6 +808,11 @@ for (const button of navButtons) {
   });
 }
 
+readerEdgeHandle?.addEventListener("click", () => {
+  if (currentModule !== "reader") return;
+  setFocusMode(!isFocusMode);
+});
+
 for (const button of modeButtons) {
   button.addEventListener("click", () => {
     setActiveMode(button.dataset.mode);
@@ -704,6 +854,10 @@ const initialModule = searchParams.get("module");
 
 if (initialModule && ["reader", "ocr", "translate"].includes(initialModule)) {
   setModule(initialModule);
+}
+
+if (searchParams.get("focus") === "1" && currentModule === "reader") {
+  setFocusMode(true);
 }
 
 if (initialTaskId) {

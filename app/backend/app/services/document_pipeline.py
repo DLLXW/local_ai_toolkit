@@ -202,6 +202,8 @@ class DocumentPipeline:
         current: list[str] = []
         in_fence = False
         in_html_table = False
+        in_math_block = False
+        math_closer = ""
 
         def flush_current() -> None:
             nonlocal current
@@ -220,6 +222,14 @@ class DocumentPipeline:
                     in_fence = False
                 continue
 
+            if in_math_block:
+                current.append(line)
+                if stripped == math_closer:
+                    flush_current()
+                    in_math_block = False
+                    math_closer = ""
+                continue
+
             if in_html_table:
                 current.append(line)
                 if "</table>" in stripped.lower():
@@ -235,6 +245,13 @@ class DocumentPipeline:
                 flush_current()
                 current.append(line)
                 in_fence = True
+                continue
+
+            if stripped in ("$$", "\\["):
+                flush_current()
+                current.append(line)
+                in_math_block = True
+                math_closer = "$$" if stripped == "$$" else "\\]"
                 continue
 
             if stripped.lower().startswith("<table"):

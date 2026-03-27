@@ -46,7 +46,18 @@ button {
 .app-shell {
   min-height: 100vh;
   display: grid;
+}
+
+.app-shell.reader-layout {
   grid-template-columns: 220px 280px minmax(0, 1fr);
+}
+
+.app-shell.single-layout {
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.app-shell.focus-mode {
+  grid-template-columns: 0 0 minmax(0, 1fr);
 }
 
 .global-sidebar,
@@ -54,6 +65,8 @@ button {
   border-right: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.62);
   backdrop-filter: blur(24px);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .global-sidebar {
@@ -75,17 +88,49 @@ button {
 }
 
 .workspace {
+  position: relative;
   padding: 28px;
 }
 
 .module-panel {
   display: none;
+  width: 100%;
 }
 
 .module-panel.active {
   display: grid;
   gap: 20px;
   align-content: start;
+  width: 100%;
+}
+
+.edge-handle {
+  position: absolute;
+  left: -16px;
+  top: 32px;
+  width: 32px;
+  height: 96px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--muted);
+  box-shadow: var(--shadow);
+  z-index: 5;
+}
+
+.app-shell.single-layout .edge-handle {
+  display: none;
+}
+
+.app-shell.focus-mode .global-sidebar,
+.app-shell.focus-mode .document-rail {
+  opacity: 0;
+  pointer-events: none;
+  border-right: 0;
+}
+
+.app-shell.focus-mode .edge-handle {
+  left: 16px;
 }
 
 .brand {
@@ -230,7 +275,6 @@ button {
   line-height: 1.7;
 }
 
-.focus-pill,
 .icon-button,
 .task-filter,
 .mode-button,
@@ -245,7 +289,6 @@ button {
   color: var(--text);
 }
 
-.focus-pill,
 .task-filter,
 .mode-button,
 .soft-button,
@@ -540,8 +583,9 @@ button {
 
 .single-tool-layout {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
   gap: 18px;
+  width: 100%;
 }
 
 .single-tool-control {
@@ -558,12 +602,14 @@ button {
 .translate-stack {
   display: grid;
   gap: 18px;
+  width: 100%;
 }
 
 .translate-actions {
   display: grid;
   grid-template-columns: 220px 1fr;
   gap: 12px;
+  align-items: stretch;
 }
 
 textarea,
@@ -723,6 +769,10 @@ textarea {
   .bilingual-pair,
   .translate-actions {
     grid-template-columns: 1fr;
+  }
+
+  .edge-handle {
+    display: none;
   }
 
   .bilingual-col + .bilingual-col {
