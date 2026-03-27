@@ -244,9 +244,9 @@ function restoreMathBlocks(html, placeholders) {
       ? `<div class="math-block">${escapeHtml(block)}</div>`
       : `<span class="math-inline">${escapeHtml(block)}</span>`;
     if (display) {
-      restored = restored.replaceAll(`<p>${token}</p>`, replacement);
+      restored = restored.split(`<p>${token}</p>`).join(replacement);
     }
-    restored = restored.replaceAll(token, replacement);
+    restored = restored.split(token).join(replacement);
   }
   return restored;
 }
