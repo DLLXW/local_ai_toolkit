@@ -20,6 +20,9 @@ class TaskRecord(BaseModel):
     step: str = "queued"
     error: str | None = None
     result_path: str | None = None
+    ocr_seconds: float | None = None
+    translation_seconds: float | None = None
+    total_seconds: float | None = None
 
 
 class TaskListResponse(BaseModel):

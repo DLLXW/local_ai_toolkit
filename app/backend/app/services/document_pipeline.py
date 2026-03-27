@@ -24,6 +24,9 @@ class PipelineArtifacts:
     segments: list[dict]
     ocr_json: list
     output_dir: Path
+    ocr_seconds: float | None = None
+    translation_seconds: float | None = None
+    total_seconds: float | None = None
 
 
 class DocumentPipeline:
@@ -39,12 +42,15 @@ class DocumentPipeline:
         doc_name: str | None = None,
         update: UpdateCallback | None = None,
     ) -> PipelineArtifacts:
+        pipeline_started_at = time.perf_counter()
         doc_name = self._safe_doc_name(doc_name or input_path.stem)
         output_dir = self.settings.outputs_dir / doc_name
         output_dir.mkdir(parents=True, exist_ok=True)
 
         self._emit(update, status="running", progress=0.1, step="ocr_running")
+        ocr_started_at = time.perf_counter()
         self._run_glmocr(input_path=input_path, output_dir=output_dir)
+        ocr_seconds = round(time.perf_counter() - ocr_started_at, 2)
 
         self._emit(update, status="running", progress=0.45, step="ocr_loaded")
         english_markdown = self._read_output_file(output_dir, ".md")
@@ -52,8 +58,10 @@ class DocumentPipeline:
         self._sync_assets(output_dir)
 
         self._emit(update, status="running", progress=0.55, step="translation_running")
+        translation_started_at = time.perf_counter()
         segments = self._split_markdown(english_markdown)
         translated_segments = self._translate_segments(segments)
+        translation_seconds = round(time.perf_counter() - translation_started_at, 2)
 
         chinese_markdown = "\n\n".join(segment["target"] for segment in translated_segments).strip()
         bilingual_markdown = "\n\n".join(
@@ -87,6 +95,9 @@ class DocumentPipeline:
             segments=translated_segments,
             ocr_json=ocr_json,
             output_dir=output_dir,
+            ocr_seconds=ocr_seconds,
+            translation_seconds=translation_seconds,
+            total_seconds=round(time.perf_counter() - pipeline_started_at, 2),
         )
 
     def _run_glmocr(self, *, input_path: Path, output_dir: Path) -> None:

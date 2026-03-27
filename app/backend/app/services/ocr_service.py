@@ -1,5 +1,6 @@
 import base64
 import json
+import time
 import urllib.request
 
 from app.core.settings import Settings
@@ -33,6 +34,7 @@ class OCRService:
         content_type: str,
         filename: str,
     ) -> OCRResponse:
+        started_at = time.perf_counter()
         mime = content_type or self._guess_mime(filename)
         encoded = base64.b64encode(file_bytes).decode("utf-8")
         data_uri = f"data:{mime};base64,{encoded}"
@@ -67,6 +69,7 @@ class OCRService:
             model=self.settings.ocr_model,
             provider_url=url,
             raw_response=raw_response,
+            elapsed_seconds=round(time.perf_counter() - started_at, 2),
         )
 
     @staticmethod

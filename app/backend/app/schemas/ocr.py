@@ -7,3 +7,4 @@ class OCRResponse(BaseModel):
     model: str
     provider_url: str
     raw_response: dict
+    elapsed_seconds: float | None = None

@@ -1,4 +1,5 @@
 import asyncio
+import time
 from pathlib import Path
 
 from app.core.settings import Settings
@@ -23,6 +24,7 @@ class TaskManager:
 
     async def _run_document_task(self, *, task_id: str, input_path: Path, doc_name: str) -> None:
         pipeline = DocumentPipeline(self.settings)
+        started_at = time.perf_counter()
 
         def update(changes: dict) -> None:
             self.store.update_task(task_id, **changes)
@@ -42,6 +44,9 @@ class TaskManager:
                 step="completed",
                 doc_name=artifacts.doc_name,
                 result_path=str(artifacts.output_dir / f"{artifacts.doc_name}.bilingual.json"),
+                ocr_seconds=artifacts.ocr_seconds,
+                translation_seconds=artifacts.translation_seconds,
+                total_seconds=artifacts.total_seconds or round(time.perf_counter() - started_at, 2),
             )
         except Exception as exc:
             self.store.update_task(
@@ -49,4 +54,5 @@ class TaskManager:
                 status="failed",
                 step="failed",
                 error=str(exc),
+                total_seconds=round(time.perf_counter() - started_at, 2),
             )

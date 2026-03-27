@@ -58,6 +58,7 @@ let currentModule = "reader";
 let isUploadingDocument = false;
 let isFocusMode = false;
 let currentDocSource = "file";
+let latestTaskStats = null;
 const searchParams = new URLSearchParams(window.location.search);
 
 async function fetchJson(url, options) {
@@ -189,6 +190,7 @@ async function refreshTasks() {
 }
 
 function renderTaskStatus(task) {
+  latestTaskStats = task;
   taskOutput.innerHTML = `
     <div class="task-status-grid">
       <div class="task-stat">
@@ -207,10 +209,23 @@ function renderTaskStatus(task) {
         <div class="task-stat-label">任务 ID</div>
         <div class="task-stat-value">${escapeHtml(task.id)}</div>
       </div>
+      <div class="task-stat">
+        <div class="task-stat-label">OCR 耗时</div>
+        <div class="task-stat-value">${formatDuration(task.ocr_seconds)}</div>
+      </div>
+      <div class="task-stat">
+        <div class="task-stat-label">翻译耗时</div>
+        <div class="task-stat-value">${formatDuration(task.translation_seconds)}</div>
+      </div>
+      <div class="task-stat">
+        <div class="task-stat-label">总耗时</div>
+        <div class="task-stat-value">${formatDuration(task.total_seconds)}</div>
+      </div>
     </div>
     <div class="progress-bar"><span style="width:${Math.round((task.progress || 0) * 100)}%"></span></div>
     ${task.error ? `<div class="hint-inline">失败原因: ${escapeHtml(task.error)}</div>` : ""}
   `;
+  syncReaderTiming(task);
 }
 
 function sanitizeHtml(html) {
@@ -584,6 +599,25 @@ function renderReaderEmpty() {
   `;
 }
 
+function formatDuration(value) {
+  if (typeof value !== "number" || Number.isNaN(value) || value <= 0) return "—";
+  if (value < 60) return `${value.toFixed(value >= 10 ? 1 : 2)} s`;
+  const minutes = Math.floor(value / 60);
+  const seconds = value % 60;
+  return `${minutes}m ${seconds.toFixed(1)}s`;
+}
+
+function syncReaderTiming(task) {
+  if (!task || !task.doc_name || task.doc_name !== currentDocName) return;
+  const parts = [
+    `当前文档: ${task.doc_name}`,
+    `视图: ${labelForMode(currentMode)}`,
+    `OCR: ${formatDuration(task.ocr_seconds)}`,
+    `翻译: ${formatDuration(task.translation_seconds)}`,
+  ];
+  readerMeta.textContent = parts.join(" · ");
+}
+
 function renderCurrentResult() {
   if (!currentResult) {
     renderReaderEmpty();
@@ -605,7 +639,11 @@ async function loadResult(docName) {
   try {
     currentResult = await fetchJson(`${API_BASE}/result/${encodeURIComponent(docName)}`);
     renderCurrentResult();
-    readerMeta.textContent = `当前文档: ${docName} · 视图: ${labelForMode(currentMode)}`;
+    if (latestTaskStats?.doc_name === docName) {
+      syncReaderTiming(latestTaskStats);
+    } else {
+      readerMeta.textContent = `当前文档: ${docName} · 视图: ${labelForMode(currentMode)}`;
+    }
     setModule("reader");
   } catch (error) {
     currentResult = null;
@@ -621,7 +659,11 @@ function setActiveMode(mode) {
   }
   renderCurrentResult();
   if (currentDocName) {
-    readerMeta.textContent = `当前文档: ${currentDocName} · 视图: ${labelForMode(currentMode)}`;
+    if (latestTaskStats?.doc_name === currentDocName) {
+      syncReaderTiming(latestTaskStats);
+    } else {
+      readerMeta.textContent = `当前文档: ${currentDocName} · 视图: ${labelForMode(currentMode)}`;
+    }
   }
 }
 
@@ -726,7 +768,7 @@ ocrButton.addEventListener("click", async () => {
       body: formData,
     });
     renderRichContent(ocrOutput, payload.markdown, null);
-    ocrMeta.textContent = `识别完成：${ocrFile.files[0].name}`;
+    ocrMeta.textContent = `识别完成：${ocrFile.files[0].name} · 耗时 ${formatDuration(payload.elapsed_seconds)}`;
   } catch (error) {
     ocrOutput.innerHTML = `<div class="plain-output">请求失败: ${escapeHtml(error.message)}</div>`;
   } finally {
