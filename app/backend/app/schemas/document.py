@@ -9,6 +9,10 @@ class UploadResponse(BaseModel):
     task: TaskRecord
 
 
+class UrlUploadRequest(BaseModel):
+    url: str
+
+
 class DocumentSegment(BaseModel):
     kind: str
     source: str

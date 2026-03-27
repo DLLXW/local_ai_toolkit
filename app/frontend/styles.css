@@ -136,24 +136,25 @@ button {
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
 .brand-mark {
-  width: 44px;
-  height: 44px;
+  width: 60px;
+  height: 60px;
   display: grid;
   place-items: center;
-  border-radius: 14px;
+  border-radius: 18px;
   background: linear-gradient(135deg, #1d2030, #565dd1);
   color: white;
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 800;
   letter-spacing: 0.08em;
+  flex: 0 0 auto;
 }
 
 .brand-title {
-  font-size: 28px;
+  font-size: 23px;
   font-weight: 800;
   letter-spacing: -0.04em;
 }
@@ -218,7 +219,12 @@ button {
   text-align: center;
 }
 
-.backend-card,
+.source-tab.active {
+  background: linear-gradient(180deg, rgba(111, 106, 248, 0.14), rgba(111, 106, 248, 0.08));
+  border-color: rgba(111, 106, 248, 0.18);
+  color: var(--accent-strong);
+}
+
 .composer-card,
 .reader-card,
 .single-tool-card,
@@ -227,22 +233,6 @@ button {
   border-radius: 24px;
   background: var(--panel);
   box-shadow: var(--shadow);
-}
-
-.backend-card {
-  padding: 18px;
-}
-
-.status-value {
-  margin-top: 10px;
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-}
-
-.muted-copy {
-  margin: 10px 0 0;
-  font-size: 13px;
 }
 
 .workspace-head,
@@ -428,6 +418,14 @@ button {
   align-items: stretch;
 }
 
+.source-panel {
+  display: none;
+}
+
+.source-panel.active {
+  display: block;
+}
+
 .dropzone-card {
   position: relative;
   min-height: 170px;
@@ -443,6 +441,21 @@ button {
 .dropzone-card.has-file {
   border-style: solid;
   background: linear-gradient(180deg, rgba(111, 106, 248, 0.08), rgba(255, 255, 255, 0.96));
+}
+
+.link-card {
+  min-height: 170px;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  padding: 24px 26px;
+  border-radius: 24px;
+  border: 1px dashed rgba(111, 106, 248, 0.24);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(247, 248, 255, 0.92));
+}
+
+.link-card input[type="url"] {
+  margin-top: 6px;
 }
 
 .dropzone-card input[type="file"] {

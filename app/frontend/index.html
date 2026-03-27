@@ -20,7 +20,7 @@
         <nav class="nav-list">
           <button class="nav-item active" data-module-nav="reader" type="button">
             <span class="nav-icon">📚</span>
-            <span>文献阅读神经元</span>
+            <span>文献阅读台</span>
           </button>
           <button class="nav-item" data-module-nav="ocr" type="button">
             <span class="nav-icon">🔎</span>
@@ -31,12 +31,6 @@
             <span>翻译器</span>
           </button>
         </nav>
-
-        <section class="backend-card">
-          <div class="section-kicker">Backend</div>
-          <div id="healthStatus" class="status-value">Checking...</div>
-          <p class="muted-copy">本地 OCR 与翻译服务已接入。切换左侧模块后，只展示当前模块对应的工作界面。</p>
-        </section>
       </aside>
 
       <aside class="document-rail" data-module-panel="reader">
@@ -63,7 +57,7 @@
           <header class="workspace-head">
             <div>
               <div class="section-kicker">Reader Workspace</div>
-              <h1>文献阅读神经元</h1>
+              <h1>文献阅读台</h1>
               <p class="hero-copy">
                 上传 PDF 或图片，自动完成 OCR、英译中，并在阅读器里切换 English / 中文 / 双语结果。
               </p>
@@ -72,22 +66,33 @@
 
           <section class="composer-card">
             <div class="composer-toolbar">
-              <label class="segmented-upload" for="docFile">
+              <button id="sourceFileTab" class="segmented-upload source-tab active" type="button">
                 <span>📁</span>
                 <span>上传文件</span>
-              </label>
-              <div class="link-chip disabled">
+              </button>
+              <button id="sourceLinkTab" class="link-chip source-tab" type="button">
                 <span>🔗</span>
                 <span>论文链接</span>
-              </div>
+              </button>
             </div>
 
             <div class="composer-grid">
-              <div class="dropzone-card">
-                <input id="docFile" type="file" accept=".pdf,.png,.jpg,.jpeg" />
-                <div class="dropzone-illustration">🗂</div>
-                <div id="docDropzoneTitle" class="dropzone-title">拖拽文档到这里，或点击上方按钮选择</div>
-                <div id="docDropzoneNote" class="dropzone-note">支持 PDF、PNG、JPG、JPEG。上传后会自动进入 OCR 与翻译流程。</div>
+              <div class="source-panel active" data-source-panel="file">
+                <div class="dropzone-card">
+                  <input id="docFile" type="file" accept=".pdf,.png,.jpg,.jpeg" />
+                  <div class="dropzone-illustration">🗂</div>
+                  <div id="docDropzoneTitle" class="dropzone-title">拖拽文档到这里，或点击上方按钮选择</div>
+                  <div id="docDropzoneNote" class="dropzone-note">支持 PDF、PNG、JPG、JPEG。上传后会自动进入 OCR 与翻译流程。</div>
+                </div>
+              </div>
+
+              <div class="source-panel" data-source-panel="link">
+                <div class="link-card">
+                  <div class="dropzone-illustration">🔗</div>
+                  <div class="dropzone-title">输入 arXiv 论文链接</div>
+                  <div class="dropzone-note">支持 `https://arxiv.org/abs/...` 或 `https://arxiv.org/pdf/...pdf`，系统会自动下载 PDF 后开始处理。</div>
+                  <input id="paperUrl" type="url" placeholder="https://arxiv.org/abs/1706.03762" />
+                </div>
               </div>
 
               <button id="docButton" class="launch-button" type="button">开始解析</button>

@@ -35,10 +35,13 @@ const ocrButton = document.querySelector("#ocrButton");
 const ocrOutput = document.querySelector("#ocrOutput");
 const ocrMeta = document.querySelector("#ocrMeta");
 const docFile = document.querySelector("#docFile");
+const paperUrl = document.querySelector("#paperUrl");
 const docButton = document.querySelector("#docButton");
 const docDropzoneTitle = document.querySelector("#docDropzoneTitle");
 const docDropzoneNote = document.querySelector("#docDropzoneNote");
 const dropzoneCard = docFile?.closest(".dropzone-card");
+const sourceTabs = [...document.querySelectorAll(".source-tab")];
+const sourcePanels = [...document.querySelectorAll("[data-source-panel]")];
 const taskMeta = document.querySelector("#taskMeta");
 const taskOutput = document.querySelector("#taskOutput");
 const readerMeta = document.querySelector("#readerMeta");
@@ -54,6 +57,7 @@ let currentFilter = "all";
 let currentModule = "reader";
 let isUploadingDocument = false;
 let isFocusMode = false;
+let currentDocSource = "file";
 const searchParams = new URLSearchParams(window.location.search);
 
 async function fetchJson(url, options) {
@@ -636,10 +640,39 @@ function updateSelectedDocumentState() {
   taskMeta.textContent = `已选择文件 ${file.name}，等待开始解析。`;
 }
 
+function updatePaperUrlState() {
+  const url = paperUrl?.value.trim();
+  if (!paperUrl) return;
+  if (!url) {
+    taskMeta.textContent = "输入 arXiv 链接后，系统会自动下载 PDF 并创建解析任务。";
+    return;
+  }
+  taskMeta.textContent = `已输入论文链接，等待开始解析。`;
+}
+
+function setDocSource(source) {
+  currentDocSource = source;
+  for (const tab of sourceTabs) {
+    tab.classList.toggle("active", tab.id === (source === "file" ? "sourceFileTab" : "sourceLinkTab"));
+  }
+  for (const panel of sourcePanels) {
+    panel.classList.toggle("active", panel.dataset.sourcePanel === source);
+  }
+  if (source === "file") {
+    updateSelectedDocumentState();
+  } else {
+    updatePaperUrlState();
+  }
+}
+
 function setUploadingState(uploading) {
   isUploadingDocument = uploading;
   docButton.disabled = uploading;
-  docButton.textContent = uploading ? "上传中..." : "开始解析";
+  if (uploading) {
+    docButton.textContent = currentDocSource === "link" ? "下载中..." : "上传中...";
+    return;
+  }
+  docButton.textContent = "开始解析";
 }
 
 translateButton.addEventListener("click", async () => {
@@ -703,36 +736,73 @@ ocrButton.addEventListener("click", async () => {
 });
 
 docFile.addEventListener("change", updateSelectedDocumentState);
+paperUrl?.addEventListener("input", updatePaperUrlState);
+
+for (const tab of sourceTabs) {
+  tab.addEventListener("click", () => {
+    setDocSource(tab.id === "sourceLinkTab" ? "link" : "file");
+  });
+}
 
 docButton.addEventListener("click", async () => {
-  if (!docFile.files?.length) {
-    taskMeta.textContent = "请先选择文档";
-    return;
-  }
-
   setUploadingState(true);
   currentResult = null;
   renderCurrentResult();
-  taskMeta.textContent = `正在上传 ${docFile.files[0].name}...`;
-  taskOutput.innerHTML = `
-    <div class="task-status-grid">
-      <div class="task-stat"><div class="task-stat-label">任务状态</div><div class="task-stat-value">uploading</div></div>
-      <div class="task-stat"><div class="task-stat-label">当前阶段</div><div class="task-stat-value">creating_task</div></div>
-      <div class="task-stat"><div class="task-stat-label">文档名</div><div class="task-stat-value">${escapeHtml(docFile.files[0].name)}</div></div>
-      <div class="task-stat"><div class="task-stat-label">用户感知</div><div class="task-stat-value">文件已提交</div></div>
-    </div>
-    <div class="progress-bar"><span style="width:12%"></span></div>
-  `;
-
-  const formData = new FormData();
-  formData.append("file", docFile.files[0]);
   try {
-    const payload = await fetchJson(`${API_BASE}/upload`, {
-      method: "POST",
-      body: formData,
-    });
+    let payload;
+    let displayName = "";
+
+    if (currentDocSource === "file") {
+      if (!docFile.files?.length) {
+        taskMeta.textContent = "请先选择文档";
+        return;
+      }
+
+      displayName = docFile.files[0].name;
+      taskMeta.textContent = `正在上传 ${displayName}...`;
+      taskOutput.innerHTML = `
+        <div class="task-status-grid">
+          <div class="task-stat"><div class="task-stat-label">任务状态</div><div class="task-stat-value">uploading</div></div>
+          <div class="task-stat"><div class="task-stat-label">当前阶段</div><div class="task-stat-value">creating_task</div></div>
+          <div class="task-stat"><div class="task-stat-label">文档名</div><div class="task-stat-value">${escapeHtml(displayName)}</div></div>
+          <div class="task-stat"><div class="task-stat-label">用户感知</div><div class="task-stat-value">文件已提交</div></div>
+        </div>
+        <div class="progress-bar"><span style="width:12%"></span></div>
+      `;
+
+      const formData = new FormData();
+      formData.append("file", docFile.files[0]);
+      payload = await fetchJson(`${API_BASE}/upload`, {
+        method: "POST",
+        body: formData,
+      });
+    } else {
+      const url = paperUrl?.value.trim();
+      if (!url) {
+        taskMeta.textContent = "请先输入 arXiv 链接";
+        return;
+      }
+
+      displayName = url;
+      taskMeta.textContent = "正在下载 arXiv 论文...";
+      taskOutput.innerHTML = `
+        <div class="task-status-grid">
+          <div class="task-stat"><div class="task-stat-label">任务状态</div><div class="task-stat-value">downloading</div></div>
+          <div class="task-stat"><div class="task-stat-label">当前阶段</div><div class="task-stat-value">fetching_pdf</div></div>
+          <div class="task-stat"><div class="task-stat-label">文档来源</div><div class="task-stat-value">arXiv</div></div>
+          <div class="task-stat"><div class="task-stat-label">用户感知</div><div class="task-stat-value">链接已提交</div></div>
+        </div>
+        <div class="progress-bar"><span style="width:12%"></span></div>
+      `;
+      payload = await fetchJson(`${API_BASE}/upload/url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+    }
+
     currentTaskId = payload.task.id;
-    taskMeta.textContent = `任务 ${payload.task.id} 已创建，正在解析 ${docFile.files[0].name}...`;
+    taskMeta.textContent = `任务 ${payload.task.id} 已创建，正在解析 ${displayName}...`;
     await refreshTasks();
     await pollTask(payload.task.id);
   } catch (error) {
@@ -847,6 +917,8 @@ function escapeHtml(value) {
 refreshTasks();
 renderReaderEmpty();
 updateSelectedDocumentState();
+updatePaperUrlState();
+setDocSource("file");
 
 const initialMode = searchParams.get("mode");
 if (initialMode && ["english", "chinese", "bilingual"].includes(initialMode)) {

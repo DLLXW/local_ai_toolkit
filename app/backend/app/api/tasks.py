@@ -1,6 +1,9 @@
+import re
 from pathlib import Path
+from urllib.parse import urlparse
 from uuid import uuid4
 
+import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.core.settings import Settings, get_settings
@@ -8,6 +11,7 @@ from app.schemas.document import (
     DocumentResultResponse,
     DocumentViewResponse,
     UploadResponse,
+    UrlUploadRequest,
 )
 from app.schemas.task import TaskDetailResponse, TaskListResponse
 from app.services.task_manager import TaskManager
@@ -15,6 +19,8 @@ from app.services.task_store import TaskStore
 
 
 router = APIRouter(tags=["tasks"])
+
+ARXIV_HOSTS = {"arxiv.org", "www.arxiv.org"}
 
 
 def _resolve_asset_base_url(settings: Settings, doc_name: str) -> str | None:
@@ -36,6 +42,54 @@ def _resolve_asset_base_url(settings: Settings, doc_name: str) -> str | None:
 
     relative = candidates[0].relative_to(settings.outputs_dir).as_posix()
     return f"/static/outputs/{relative}"
+
+
+def _create_document_task(
+    *,
+    settings: Settings,
+    input_path: Path,
+    input_filename: str,
+    doc_name: str,
+) -> UploadResponse:
+    task_id = str(uuid4())
+    store = TaskStore(settings.tasks_file)
+    task = store.create_task(
+        task_id=task_id,
+        title=doc_name,
+        kind="doc_translate",
+        input_filename=input_filename,
+        doc_name=doc_name,
+    )
+    TaskManager(settings).start_document_task(task_id, input_path, doc_name)
+    return UploadResponse(task=task)
+
+
+def _normalize_arxiv_url(raw_url: str) -> tuple[str, str]:
+    url = raw_url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Missing paper url")
+
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or parsed.netloc not in ARXIV_HOSTS:
+        raise HTTPException(status_code=400, detail="Currently only arXiv links are supported")
+
+    path = parsed.path.rstrip("/")
+    if path.startswith("/abs/"):
+        paper_id = path.removeprefix("/abs/")
+        return f"https://arxiv.org/pdf/{paper_id}.pdf", paper_id
+
+    if path.startswith("/pdf/"):
+        paper_id = path.removeprefix("/pdf/")
+        if paper_id.endswith(".pdf"):
+            paper_id = paper_id[:-4]
+        return f"https://arxiv.org/pdf/{paper_id}.pdf", paper_id
+
+    raise HTTPException(status_code=400, detail="Unsupported arXiv link format")
+
+
+def _safe_arxiv_doc_name(paper_id: str) -> str:
+    cleaned = re.sub(r"[^0-9A-Za-z._-]+", "-", paper_id.strip())
+    return cleaned.strip("-") or "arxiv-paper"
 
 
 @router.get("/tasks", response_model=TaskListResponse)
@@ -65,21 +119,48 @@ async def upload_document(
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
-    task_id = str(uuid4())
-    input_path = settings.uploads_dir / f"{task_id}-{Path(file.filename).name}"
+    input_path = settings.uploads_dir / f"{uuid4()}-{Path(file.filename).name}"
     input_path.write_bytes(file_bytes)
 
     doc_name = Path(file.filename).stem
-    store = TaskStore(settings.tasks_file)
-    task = store.create_task(
-        task_id=task_id,
-        title=doc_name,
-        kind="doc_translate",
+    return _create_document_task(
+        settings=settings,
+        input_path=input_path,
         input_filename=file.filename,
         doc_name=doc_name,
     )
-    TaskManager(settings).start_document_task(task_id, input_path, doc_name)
-    return UploadResponse(task=task)
+
+
+@router.post("/upload/url", response_model=UploadResponse)
+async def upload_document_from_url(
+    payload: UrlUploadRequest,
+    settings: Settings = Depends(get_settings),
+) -> UploadResponse:
+    pdf_url, paper_id = _normalize_arxiv_url(payload.url)
+    filename = f"{paper_id}.pdf"
+    input_path = settings.uploads_dir / f"{uuid4()}-{filename}"
+
+    try:
+        async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
+            response = await client.get(
+                pdf_url,
+                headers={"User-Agent": "Local AI Toolkit/0.1"},
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to download arXiv PDF: {exc}") from exc
+
+    content_type = response.headers.get("content-type", "")
+    if "pdf" not in content_type.lower() and not response.content.startswith(b"%PDF"):
+        raise HTTPException(status_code=400, detail="Downloaded content is not a PDF")
+
+    input_path.write_bytes(response.content)
+    return _create_document_task(
+        settings=settings,
+        input_path=input_path,
+        input_filename=filename,
+        doc_name=_safe_arxiv_doc_name(paper_id),
+    )
 
 
 @router.get("/result/{doc_name}", response_model=DocumentResultResponse)
