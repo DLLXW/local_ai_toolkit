@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "dompurify": "^3.2.6",
+    "katex": "^0.16.22",
     "marked": "^15.0.12"
   },
   "devDependencies": {

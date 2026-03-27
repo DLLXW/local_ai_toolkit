@@ -189,7 +189,7 @@ class DocumentPipeline:
         raise last_error
 
     def _split_markdown(self, markdown: str) -> list[dict]:
-        blocks = self._extract_markdown_blocks(markdown)
+        blocks = self._merge_semantic_blocks(self._extract_markdown_blocks(markdown))
         segments: list[dict] = []
         for block in blocks:
             kind = "raw" if self._is_raw_block(block) else "text"
@@ -256,6 +256,38 @@ class DocumentPipeline:
         flush_current()
         return blocks
 
+    def _merge_semantic_blocks(self, blocks: list[str]) -> list[str]:
+        merged: list[str] = []
+        pending: list[str] = []
+
+        def flush_pending() -> None:
+            nonlocal pending
+            block = "\n\n".join(part.strip() for part in pending if part.strip()).strip()
+            if block:
+                merged.append(block)
+            pending = []
+
+        for block in blocks:
+            if self._is_raw_block(block):
+                flush_pending()
+                merged.append(block)
+                continue
+
+            if self._is_heading_block(block):
+                flush_pending()
+                pending = [block]
+                continue
+
+            if pending:
+                pending.append(block)
+                continue
+
+            pending = [block]
+            flush_pending()
+
+        flush_pending()
+        return merged
+
     @staticmethod
     def _is_standalone_raw_line(line: str) -> bool:
         return (
@@ -278,6 +310,10 @@ class DocumentPipeline:
             or "\\[" in stripped
             or "\\begin{" in stripped
         )
+
+    @staticmethod
+    def _is_heading_block(block: str) -> bool:
+        return bool(re.match(r"^#{1,6}\s", block.strip()))
 
     def _chunk_text(self, text: str) -> list[str]:
         max_chars = self.settings.translate_max_chars_per_chunk

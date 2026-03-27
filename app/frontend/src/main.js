@@ -1,5 +1,7 @@
 import DOMPurify from "dompurify";
 import { marked } from "marked";
+import "katex/dist/katex.min.css";
+import renderMathInElement from "katex/contrib/auto-render";
 
 const API_BASE = "http://localhost:8000/api";
 const BACKEND_ORIGIN = new URL(API_BASE).origin;
@@ -10,6 +12,9 @@ marked.setOptions({
 });
 
 const healthStatus = document.querySelector("#healthStatus");
+const navButtons = [...document.querySelectorAll("[data-module-nav]")];
+const modulePanels = [...document.querySelectorAll("[data-module]")];
+const readerRail = document.querySelector('[data-module-panel="reader"]');
 const taskList = document.querySelector("#taskList");
 const taskFilters = document.querySelector("#taskFilters");
 const taskCountBadge = document.querySelector("#taskCountBadge");
@@ -21,8 +26,12 @@ const translateOutput = document.querySelector("#translateOutput");
 const ocrFile = document.querySelector("#ocrFile");
 const ocrButton = document.querySelector("#ocrButton");
 const ocrOutput = document.querySelector("#ocrOutput");
+const ocrMeta = document.querySelector("#ocrMeta");
 const docFile = document.querySelector("#docFile");
 const docButton = document.querySelector("#docButton");
+const docDropzoneTitle = document.querySelector("#docDropzoneTitle");
+const docDropzoneNote = document.querySelector("#docDropzoneNote");
+const dropzoneCard = docFile?.closest(".dropzone-card");
 const taskMeta = document.querySelector("#taskMeta");
 const taskOutput = document.querySelector("#taskOutput");
 const readerMeta = document.querySelector("#readerMeta");
@@ -35,6 +44,8 @@ let currentMode = "bilingual";
 let currentResult = null;
 let allTasks = [];
 let currentFilter = "all";
+let currentModule = "reader";
+let isUploadingDocument = false;
 const searchParams = new URLSearchParams(window.location.search);
 
 async function fetchJson(url, options) {
@@ -44,6 +55,32 @@ async function fetchJson(url, options) {
     throw new Error(payload.detail || JSON.stringify(payload));
   }
   return payload;
+}
+
+function renderMath(container) {
+  if (!container) return;
+  renderMathInElement(container, {
+    delimiters: [
+      { left: "$$", right: "$$", display: true },
+      { left: "\\[", right: "\\]", display: true },
+      { left: "\\(", right: "\\)", display: false },
+      { left: "$", right: "$", display: false },
+    ],
+    throwOnError: false,
+  });
+}
+
+function setModule(moduleName) {
+  currentModule = moduleName;
+  for (const button of navButtons) {
+    button.classList.toggle("active", button.dataset.moduleNav === moduleName);
+  }
+  for (const panel of modulePanels) {
+    panel.classList.toggle("active", panel.dataset.module === moduleName);
+  }
+  if (readerRail) {
+    readerRail.classList.toggle("hidden", moduleName !== "reader");
+  }
 }
 
 async function refreshHealth() {
@@ -57,6 +94,9 @@ async function refreshHealth() {
 
 function getFilteredTasks(items) {
   if (currentFilter === "all") return items;
+  if (currentFilter === "running") {
+    return items.filter((task) => ["running", "queued"].includes(task.status));
+  }
   return items.filter((task) => task.status === currentFilter);
 }
 
@@ -69,11 +109,7 @@ function renderFilters(items) {
       label: "处理中",
       count: items.filter((item) => ["running", "queued"].includes(item.status)).length,
     },
-    {
-      id: "failed",
-      label: "失败记录",
-      count: items.filter((item) => item.status === "failed").length,
-    },
+    { id: "failed", label: "失败记录", count: items.filter((item) => item.status === "failed").length },
   ];
 
   taskFilters.innerHTML = groups
@@ -97,7 +133,7 @@ function renderTaskList(items) {
   taskCountBadge.textContent = String(filtered.length);
 
   if (!filtered.length) {
-    taskList.innerHTML = '<div class="plain-output">当前筛选条件下还没有文档。</div>';
+    taskList.innerHTML = '<div class="reader-empty compact-empty"><div class="reader-empty-icon">🗃</div><h3>暂无文档</h3><p>当前筛选条件下还没有文稿记录。</p></div>';
     return;
   }
 
@@ -195,6 +231,7 @@ function renderMarkdownToHtml(markdown, result) {
 
 function renderRichContent(container, markdown, result) {
   container.innerHTML = `<div class="rendered-doc">${renderMarkdownToHtml(markdown, result)}</div>`;
+  renderMath(container);
 }
 
 function splitMarkdownBlocks(markdown) {
@@ -264,7 +301,47 @@ function splitMarkdownBlocks(markdown) {
   }
 
   flushCurrent();
-  return blocks;
+  return mergeSemanticBlocks(blocks);
+}
+
+function mergeSemanticBlocks(blocks) {
+  const merged = [];
+  let pending = [];
+
+  const flushPending = () => {
+    const block = pending.map((part) => part.trim()).filter(Boolean).join("\n\n").trim();
+    if (block) merged.push(block);
+    pending = [];
+  };
+
+  for (const block of blocks) {
+    if (isRawBlock(block)) {
+      flushPending();
+      merged.push(block);
+      continue;
+    }
+
+    if (isHeadingBlock(block)) {
+      flushPending();
+      pending = [block];
+      continue;
+    }
+
+    if (pending.length) {
+      pending.push(block);
+      continue;
+    }
+
+    pending = [block];
+    flushPending();
+  }
+
+  flushPending();
+  return merged;
+}
+
+function isHeadingBlock(block) {
+  return /^#{1,6}\s/.test(String(block || "").trim());
 }
 
 function isStandaloneRawLine(line) {
@@ -339,17 +416,22 @@ function renderBilingualResult(container, result) {
     .join("");
 
   container.innerHTML = `<div class="bilingual-grid">${html}</div>`;
+  renderMath(container);
+}
+
+function renderReaderEmpty() {
+  resultOutput.innerHTML = `
+    <div class="reader-empty">
+      <div class="reader-empty-icon">📖</div>
+      <h3>准备就绪</h3>
+      <p>上传文档开始 OCR 解析与翻译，或从左侧历史记录中选择一份结果继续阅读。</p>
+    </div>
+  `;
 }
 
 function renderCurrentResult() {
   if (!currentResult) {
-    resultOutput.innerHTML = `
-      <div class="reader-empty">
-        <div class="reader-empty-icon">📖</div>
-        <h3>准备就绪</h3>
-        <p>上传文档开始 OCR 解析与翻译，或从左侧历史记录中选择一份结果继续阅读。</p>
-      </div>
-    `;
+    renderReaderEmpty();
     return;
   }
 
@@ -369,6 +451,7 @@ async function loadResult(docName) {
     currentResult = await fetchJson(`${API_BASE}/result/${encodeURIComponent(docName)}`);
     renderCurrentResult();
     readerMeta.textContent = `当前文档: ${docName} · 视图: ${labelForMode(currentMode)}`;
+    setModule("reader");
   } catch (error) {
     currentResult = null;
     resultOutput.innerHTML = `<div class="plain-output">结果加载失败: ${escapeHtml(error.message)}</div>`;
@@ -387,8 +470,36 @@ function setActiveMode(mode) {
   }
 }
 
+function updateSelectedDocumentState() {
+  const file = docFile.files?.[0];
+  if (!file) {
+    dropzoneCard?.classList.remove("has-file");
+    docDropzoneTitle.textContent = "拖拽文档到这里，或点击上方按钮选择";
+    docDropzoneNote.textContent = "支持 PDF、PNG、JPG、JPEG。上传后会自动进入 OCR 与翻译流程。";
+    return;
+  }
+
+  dropzoneCard?.classList.add("has-file");
+  docDropzoneTitle.textContent = `已选择：${file.name}`;
+  docDropzoneNote.textContent = `文件大小 ${(file.size / 1024 / 1024).toFixed(2)} MB，点击右侧“开始解析”后会立即创建任务。`;
+  taskMeta.textContent = `已选择文件 ${file.name}，等待开始解析。`;
+}
+
+function setUploadingState(uploading) {
+  isUploadingDocument = uploading;
+  docButton.disabled = uploading;
+  docButton.textContent = uploading ? "上传中..." : "开始解析";
+}
+
 translateButton.addEventListener("click", async () => {
-  translateOutput.textContent = "翻译中...";
+  if (!translateInput.value.trim()) {
+    translateOutput.innerHTML = '<div class="reader-empty compact-empty"><div class="reader-empty-icon">🌐</div><h3>请输入内容</h3><p>输入一段文本后再发起翻译。</p></div>';
+    return;
+  }
+
+  translateButton.disabled = true;
+  translateButton.textContent = "翻译中...";
+  translateOutput.innerHTML = '<div class="reader-empty compact-empty"><div class="reader-empty-icon">🌐</div><h3>正在翻译</h3><p>请稍候，结果马上回来。</p></div>';
   try {
     const payload = await fetchJson(`${API_BASE}/translate`, {
       method: "POST",
@@ -398,10 +509,20 @@ translateButton.addEventListener("click", async () => {
         direction: translateDirection.value,
       }),
     });
-    translateOutput.textContent = payload.translated_text;
+    renderRichContent(translateOutput, payload.translated_text, null);
   } catch (error) {
-    translateOutput.textContent = `请求失败: ${error.message}`;
+    translateOutput.innerHTML = `<div class="plain-output">请求失败: ${escapeHtml(error.message)}</div>`;
+  } finally {
+    translateButton.disabled = false;
+    translateButton.textContent = "立即翻译";
   }
+});
+
+ocrFile.addEventListener("change", () => {
+  const file = ocrFile.files?.[0];
+  ocrMeta.textContent = file
+    ? `已选择 ${file.name}，点击“开始 OCR”发起识别。`
+    : "支持图片和 PDF，识别完成后将在右侧展示 markdown 渲染结果。";
 });
 
 ocrButton.addEventListener("click", async () => {
@@ -409,7 +530,10 @@ ocrButton.addEventListener("click", async () => {
     ocrOutput.innerHTML = '<div class="plain-output">请先选择文件</div>';
     return;
   }
-  ocrOutput.innerHTML = '<div class="plain-output">OCR 处理中...</div>';
+
+  ocrButton.disabled = true;
+  ocrButton.textContent = "识别中...";
+  ocrOutput.innerHTML = '<div class="reader-empty compact-empty"><div class="reader-empty-icon">🔎</div><h3>正在识别</h3><p>OCR 处理中，请稍候。</p></div>';
   const formData = new FormData();
   formData.append("file", ocrFile.files[0]);
   try {
@@ -418,19 +542,36 @@ ocrButton.addEventListener("click", async () => {
       body: formData,
     });
     renderRichContent(ocrOutput, payload.markdown, null);
+    ocrMeta.textContent = `识别完成：${ocrFile.files[0].name}`;
   } catch (error) {
     ocrOutput.innerHTML = `<div class="plain-output">请求失败: ${escapeHtml(error.message)}</div>`;
+  } finally {
+    ocrButton.disabled = false;
+    ocrButton.textContent = "开始 OCR";
   }
 });
+
+docFile.addEventListener("change", updateSelectedDocumentState);
 
 docButton.addEventListener("click", async () => {
   if (!docFile.files?.length) {
     taskMeta.textContent = "请先选择文档";
     return;
   }
-  taskMeta.textContent = "上传中...";
+
+  setUploadingState(true);
   currentResult = null;
   renderCurrentResult();
+  taskMeta.textContent = `正在上传 ${docFile.files[0].name}...`;
+  taskOutput.innerHTML = `
+    <div class="task-status-grid">
+      <div class="task-stat"><div class="task-stat-label">任务状态</div><div class="task-stat-value">uploading</div></div>
+      <div class="task-stat"><div class="task-stat-label">当前阶段</div><div class="task-stat-value">creating_task</div></div>
+      <div class="task-stat"><div class="task-stat-label">文档名</div><div class="task-stat-value">${escapeHtml(docFile.files[0].name)}</div></div>
+      <div class="task-stat"><div class="task-stat-label">用户感知</div><div class="task-stat-value">文件已提交</div></div>
+    </div>
+    <div class="progress-bar"><span style="width:12%"></span></div>
+  `;
 
   const formData = new FormData();
   formData.append("file", docFile.files[0]);
@@ -440,10 +581,13 @@ docButton.addEventListener("click", async () => {
       body: formData,
     });
     currentTaskId = payload.task.id;
-    taskMeta.textContent = `任务 ${payload.task.id} 已创建，正在解析...`;
+    taskMeta.textContent = `任务 ${payload.task.id} 已创建，正在解析 ${docFile.files[0].name}...`;
+    await refreshTasks();
     await pollTask(payload.task.id);
   } catch (error) {
     taskMeta.textContent = `请求失败: ${error.message}`;
+  } finally {
+    setUploadingState(false);
   }
 });
 
@@ -489,7 +633,7 @@ taskList.addEventListener("click", async (event) => {
         currentDocName = null;
         currentResult = null;
         taskOutput.innerHTML = "";
-        renderCurrentResult();
+        renderReaderEmpty();
         readerMeta.textContent = "从左侧文档列表中打开一个任务，即可在这里阅读结果。";
       }
       await refreshTasks();
@@ -504,7 +648,6 @@ taskFilters.addEventListener("click", (event) => {
   if (!(target instanceof HTMLElement)) return;
   const button = target.closest("[data-filter]");
   if (!(button instanceof HTMLElement)) return;
-
   currentFilter = button.dataset.filter || "all";
   renderFilters(allTasks);
   renderTaskList(allTasks);
@@ -513,6 +656,12 @@ taskFilters.addEventListener("click", (event) => {
 refreshTasksButton.addEventListener("click", () => {
   refreshTasks();
 });
+
+for (const button of navButtons) {
+  button.addEventListener("click", () => {
+    setModule(button.dataset.moduleNav || "reader");
+  });
+}
 
 for (const button of modeButtons) {
   button.addEventListener("click", () => {
@@ -541,6 +690,8 @@ function escapeHtml(value) {
 
 refreshHealth();
 refreshTasks();
+renderReaderEmpty();
+updateSelectedDocumentState();
 
 const initialMode = searchParams.get("mode");
 if (initialMode && ["english", "chinese", "bilingual"].includes(initialMode)) {
@@ -549,6 +700,11 @@ if (initialMode && ["english", "chinese", "bilingual"].includes(initialMode)) {
 
 const initialTaskId = searchParams.get("task");
 const initialDocName = searchParams.get("doc");
+const initialModule = searchParams.get("module");
+
+if (initialModule && ["reader", "ocr", "translate"].includes(initialModule)) {
+  setModule(initialModule);
+}
 
 if (initialTaskId) {
   pollTask(initialTaskId).catch((error) => {
@@ -558,6 +714,4 @@ if (initialTaskId) {
   loadResult(initialDocName).catch((error) => {
     readerMeta.textContent = `结果加载失败: ${error.message}`;
   });
-} else {
-  renderCurrentResult();
 }
