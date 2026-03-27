@@ -10,13 +10,13 @@ const DISPLAY_MATH_FENCES = {
   "$$": "$$",
   "\\[": "\\]",
 };
+const INLINE_MATH_PATTERN = /(\\\([\s\S]*?\\\))|(?<!\$)(\$[^\n$]+?\$)(?!\$)/g;
 
 marked.setOptions({
   gfm: true,
   breaks: false,
 });
 
-const healthStatus = document.querySelector("#healthStatus");
 const appShell = document.querySelector("#appShell");
 const readerEdgeHandle = document.querySelector("#readerEdgeHandle");
 const navButtons = [...document.querySelectorAll("[data-module-nav]")];
@@ -101,15 +101,6 @@ function setModule(moduleName) {
   appShell.classList.toggle("single-layout", moduleName !== "reader");
   if (moduleName !== "reader") {
     setFocusMode(false);
-  }
-}
-
-async function refreshHealth() {
-  try {
-    const payload = await fetchJson(`${API_BASE}/health`);
-    healthStatus.textContent = `${payload.status} · ${payload.environment}`;
-  } catch (error) {
-    healthStatus.textContent = `Unavailable · ${error.message}`;
   }
 }
 
@@ -225,21 +216,36 @@ function sanitizeHtml(html) {
   });
 }
 
-function extractDisplayMathBlocks(markdown) {
+function extractMathBlocks(markdown) {
   const placeholders = [];
-  const rewritten = String(markdown || "").replace(DISPLAY_MATH_PATTERN, (match, block) => {
+  let rewritten = String(markdown || "");
+
+  rewritten = rewritten.replace(DISPLAY_MATH_PATTERN, (match, block) => {
     const token = `MATHBLOCKTOKEN${placeholders.length}END`;
-    placeholders.push({ token, block: block.trim() });
+    placeholders.push({ token, block: block.trim(), display: true });
     return match.replace(block, token);
   });
+
+  rewritten = rewritten.replace(INLINE_MATH_PATTERN, (match, parenBlock, dollarBlock) => {
+    const block = (parenBlock || dollarBlock || "").trim();
+    if (!block) return match;
+    const token = `MATHINLINETOKEN${placeholders.length}END`;
+    placeholders.push({ token, block, display: false });
+    return token;
+  });
+
   return { rewritten, placeholders };
 }
 
-function restoreDisplayMathBlocks(html, placeholders) {
+function restoreMathBlocks(html, placeholders) {
   let restored = html;
-  for (const { token, block } of placeholders) {
-    const replacement = `<div class="math-block">${escapeHtml(block)}</div>`;
-    restored = restored.replaceAll(`<p>${token}</p>`, replacement);
+  for (const { token, block, display } of placeholders) {
+    const replacement = display
+      ? `<div class="math-block">${escapeHtml(block)}</div>`
+      : `<span class="math-inline">${escapeHtml(block)}</span>`;
+    if (display) {
+      restored = restored.replaceAll(`<p>${token}</p>`, replacement);
+    }
     restored = restored.replaceAll(token, replacement);
   }
   return restored;
@@ -266,9 +272,9 @@ function normalizeAssetPaths(html, result) {
 }
 
 function renderMarkdownToHtml(markdown, result) {
-  const { rewritten, placeholders } = extractDisplayMathBlocks(markdown || "");
+  const { rewritten, placeholders } = extractMathBlocks(markdown || "");
   const rawHtml = marked.parse(rewritten);
-  const restoredHtml = restoreDisplayMathBlocks(rawHtml, placeholders);
+  const restoredHtml = restoreMathBlocks(rawHtml, placeholders);
   return normalizeAssetPaths(sanitizeHtml(restoredHtml), result);
 }
 
@@ -838,7 +844,6 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-refreshHealth();
 refreshTasks();
 renderReaderEmpty();
 updateSelectedDocumentState();
