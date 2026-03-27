@@ -10,5 +10,8 @@ app/.venv/
 app/backend/.venv/
 app/backend/.env
 app/backend/data/
+app/data/uploads/
+app/data/outputs/
+app/data/tasks.json
 app/frontend/node_modules/
 app/frontend/dist/
