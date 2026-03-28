@@ -30,6 +30,10 @@
             <span class="nav-icon">🌐</span>
             <span>翻译器</span>
           </button>
+          <button class="nav-item" data-module-nav="webpage" type="button">
+            <span class="nav-icon">📰</span>
+            <span>网页翻译台</span>
+          </button>
         </nav>
       </aside>
 
@@ -189,6 +193,58 @@
                     <div class="reader-empty-icon">🌐</div>
                     <h3>等待翻译</h3>
                     <p>输入一段文本后，翻译结果会显示在这里。</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="module-panel" data-module="webpage">
+          <header class="workspace-head">
+            <div>
+              <div class="section-kicker">Webpage Workspace</div>
+              <h1>网页翻译台</h1>
+              <p class="hero-copy">输入英文网页链接，自动抓取正文并翻译成中文，适合浏览论文博客、技术文章和英文说明页。</p>
+            </div>
+          </header>
+
+          <section class="single-tool-card">
+            <div class="translate-stack">
+              <div class="translate-pane">
+                <div class="section-kicker">Source</div>
+                <h2>网页链接</h2>
+                <input id="webpageUrl" type="url" placeholder="https://example.com/article" />
+                <div class="translate-actions compact-actions">
+                  <select id="webpageDirection">
+                    <option value="en2zh">英文网页 -> 中文</option>
+                    <option value="zh2en">中文网页 -> 英文</option>
+                  </select>
+                  <button id="webpageButton" class="soft-button primary-action" type="button">抓取并翻译</button>
+                </div>
+                <div id="webpageMeta" class="hint-inline">系统会先抓取网页正文，再调用本地翻译模型进行分段翻译。</div>
+              </div>
+              <div class="webpage-result-grid">
+                <div class="translate-pane">
+                  <div class="section-kicker">Original</div>
+                  <h2>网页原文</h2>
+                  <div id="webpageSource" class="reader-surface tool-surface">
+                    <div class="reader-empty compact-empty">
+                      <div class="reader-empty-icon">📰</div>
+                      <h3>等待抓取</h3>
+                      <p>输入一个网页链接后，这里会显示抓取到的正文内容。</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="translate-pane">
+                  <div class="section-kicker">Translated</div>
+                  <h2>翻译结果</h2>
+                  <div id="webpageOutput" class="reader-surface tool-surface">
+                    <div class="reader-empty compact-empty">
+                      <div class="reader-empty-icon">🌍</div>
+                      <h3>等待翻译</h3>
+                      <p>网页抓取成功后，这里会展示翻译后的内容。</p>
+                    </div>
                   </div>
                 </div>
               </div>
