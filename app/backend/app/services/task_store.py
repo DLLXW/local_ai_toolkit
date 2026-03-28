@@ -33,6 +33,7 @@ class TaskStore:
         kind: TaskKind,
         input_filename: str | None = None,
         doc_name: str | None = None,
+        folder_name: str = "未分类",
     ) -> TaskRecord:
         now = utc_now()
         task = TaskRecord(
@@ -40,6 +41,7 @@ class TaskStore:
             kind=kind,
             status="queued",
             title=title,
+            folder_name=folder_name,
             created_at=now,
             updated_at=now,
             input_filename=input_filename,

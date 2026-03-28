@@ -12,6 +12,7 @@ class TaskRecord(BaseModel):
     kind: TaskKind
     status: TaskStatus
     title: str
+    folder_name: str = "未分类"
     created_at: datetime
     updated_at: datetime
     input_filename: str | None = None
@@ -31,3 +32,8 @@ class TaskListResponse(BaseModel):
 
 class TaskDetailResponse(BaseModel):
     task: TaskRecord
+
+
+class TaskUpdateRequest(BaseModel):
+    title: str | None = None
+    folder_name: str | None = None

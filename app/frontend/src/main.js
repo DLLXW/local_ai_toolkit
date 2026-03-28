@@ -111,29 +111,37 @@ function setModule(moduleName) {
 
 function getFilteredTasks(items) {
   if (currentFilter === "all") return items;
-  if (currentFilter === "running") {
-    return items.filter((task) => ["running", "queued"].includes(task.status));
+  return items.filter((task) => getTaskFolder(task) === currentFilter);
+}
+
+function getTaskFolder(task) {
+  return task.folder_name || "未分类";
+}
+
+function getFolderGroups(items) {
+  const counts = new Map();
+  for (const task of items) {
+    const folder = getTaskFolder(task);
+    counts.set(folder, (counts.get(folder) || 0) + 1);
   }
-  return items.filter((task) => task.status === currentFilter);
+
+  const folders = [...counts.entries()]
+    .sort(([left], [right]) => {
+      if (left === "未分类") return 1;
+      if (right === "未分类") return -1;
+      return left.localeCompare(right, "zh-CN");
+    })
+    .map(([id, count]) => ({ id, label: id, count }));
+
+  return [{ id: "all", label: "全部文稿", count: items.length }, ...folders];
 }
 
 function renderFilters(items) {
-  const groups = [
-    { id: "all", label: "全部文稿", count: items.length },
-    { id: "done", label: "已完成", count: items.filter((item) => item.status === "done").length },
-    {
-      id: "running",
-      label: "处理中",
-      count: items.filter((item) => ["running", "queued"].includes(item.status)).length,
-    },
-    { id: "failed", label: "失败记录", count: items.filter((item) => item.status === "failed").length },
-  ];
-
-  taskFilters.innerHTML = groups
+  taskFilters.innerHTML = getFolderGroups(items)
     .map(
       (group) => `
-        <button class="task-filter${group.id === currentFilter ? " active" : ""}" type="button" data-filter="${group.id}">
-          <span>${group.label}</span>
+        <button class="task-filter${group.id === currentFilter ? " active" : ""}" type="button" data-filter="${escapeHtml(group.id)}">
+          <span>${escapeHtml(group.label)}</span>
           <span class="task-filter-count">${group.count}</span>
         </button>
       `,
@@ -148,6 +156,9 @@ function taskStatusClass(status) {
 function renderTaskList(items) {
   const filtered = getFilteredTasks(items);
   taskCountBadge.textContent = String(filtered.length);
+  const folderOptions = getFolderGroups(items)
+    .filter((folder) => folder.id !== "all")
+    .map((folder) => folder.id);
 
   if (!filtered.length) {
     taskList.innerHTML = '<div class="reader-empty compact-empty"><div class="reader-empty-icon">🗃</div><h3>暂无文档</h3><p>当前筛选条件下还没有文稿记录。</p></div>';
@@ -157,16 +168,33 @@ function renderTaskList(items) {
   taskList.innerHTML = filtered
     .map((task) => {
       const activeClass = task.id === currentTaskId ? " active" : "";
+      const folderName = getTaskFolder(task);
       return `
         <article class="task-item${activeClass}">
           <div class="task-item-top">
-            <strong>${escapeHtml(task.title)}</strong>
+            <div class="task-title-block">
+              <strong>${escapeHtml(task.title)}</strong>
+              <button class="mini-icon-button" type="button" data-edit-title="${task.id}" aria-label="编辑标题">✎</button>
+            </div>
             <span class="task-status-pill ${taskStatusClass(task.status)}">${escapeHtml(task.status)}</span>
           </div>
           <div class="task-item-meta">
+            <div>文件夹: ${escapeHtml(folderName)}</div>
             <div>文档: ${escapeHtml(task.doc_name || task.input_filename || "-")}</div>
             <div>阶段: ${escapeHtml(task.step || "-")}</div>
             <div>进度: ${Math.round((task.progress || 0) * 100)}%</div>
+          </div>
+          <div class="task-folder-row">
+            <span class="task-folder-label">归类</span>
+            <select class="task-folder-select" data-task-folder="${task.id}">
+              ${folderOptions
+                .map(
+                  (folder) =>
+                    `<option value="${escapeHtml(folder)}"${folder === folderName ? " selected" : ""}>${escapeHtml(folder)}</option>`,
+                )
+                .join("")}
+              <option value="__new__">新建文件夹...</option>
+            </select>
           </div>
           <div class="task-item-actions">
             <button class="task-action" type="button" data-open-task="${task.id}">打开</button>
@@ -182,11 +210,26 @@ async function refreshTasks() {
   try {
     const payload = await fetchJson(`${API_BASE}/tasks`);
     allTasks = payload.items;
+    if (currentFilter !== "all" && !getFolderGroups(allTasks).some((folder) => folder.id === currentFilter)) {
+      currentFilter = "all";
+    }
     renderFilters(allTasks);
     renderTaskList(allTasks);
   } catch (error) {
     taskList.innerHTML = `<div class="plain-output">任务列表加载失败: ${escapeHtml(error.message)}</div>`;
   }
+}
+
+async function updateTaskMetadata(taskId, changes) {
+  const payload = await fetchJson(`${API_BASE}/task/${taskId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(changes),
+  });
+  if (currentTaskId === taskId) {
+    renderTaskStatus(payload.task);
+  }
+  await refreshTasks();
 }
 
 function renderTaskStatus(task) {
@@ -881,6 +924,19 @@ taskList.addEventListener("click", async (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
 
+  const editTitleId = target.dataset.editTitle;
+  if (editTitleId) {
+    const task = allTasks.find((item) => item.id === editTitleId);
+    const nextTitle = window.prompt("输入新的文献标题", task?.title || "");
+    if (nextTitle === null) return;
+    try {
+      await updateTaskMetadata(editTitleId, { title: nextTitle });
+    } catch (error) {
+      taskMeta.textContent = `标题更新失败: ${error.message}`;
+    }
+    return;
+  }
+
   const openTaskId = target.dataset.openTask;
   if (openTaskId) {
     await pollTask(openTaskId);
@@ -903,6 +959,30 @@ taskList.addEventListener("click", async (event) => {
     } catch (error) {
       taskMeta.textContent = `删除失败: ${error.message}`;
     }
+  }
+});
+
+taskList.addEventListener("change", async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLSelectElement)) return;
+  const taskId = target.dataset.taskFolder;
+  if (!taskId) return;
+
+  let nextFolder = target.value;
+  if (nextFolder === "__new__") {
+    const createdFolder = window.prompt("输入新的文件夹名称", "");
+    if (createdFolder === null) {
+      await refreshTasks();
+      return;
+    }
+    nextFolder = createdFolder;
+  }
+
+  try {
+    await updateTaskMetadata(taskId, { folder_name: nextFolder });
+  } catch (error) {
+    taskMeta.textContent = `文件夹更新失败: ${error.message}`;
+    await refreshTasks();
   }
 });
 
