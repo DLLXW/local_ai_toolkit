@@ -30,12 +30,6 @@ const translateInput = document.querySelector("#translateInput");
 const translateDirection = document.querySelector("#translateDirection");
 const translateButton = document.querySelector("#translateButton");
 const translateOutput = document.querySelector("#translateOutput");
-const webpageUrl = document.querySelector("#webpageUrl");
-const webpageDirection = document.querySelector("#webpageDirection");
-const webpageButton = document.querySelector("#webpageButton");
-const webpageMeta = document.querySelector("#webpageMeta");
-const webpageSource = document.querySelector("#webpageSource");
-const webpageOutput = document.querySelector("#webpageOutput");
 const ocrFile = document.querySelector("#ocrFile");
 const ocrButton = document.querySelector("#ocrButton");
 const ocrOutput = document.querySelector("#ocrOutput");
@@ -827,47 +821,6 @@ translateButton.addEventListener("click", async () => {
   }
 });
 
-webpageButton?.addEventListener("click", async () => {
-  if (!webpageUrl?.value.trim()) {
-    webpageOutput.innerHTML = '<div class="plain-output">请先输入网页链接</div>';
-    return;
-  }
-
-  webpageButton.disabled = true;
-  webpageButton.textContent = "抓取中...";
-  webpageMeta.textContent = "正在抓取网页正文并调用翻译模型，请稍候。";
-  webpageSource.innerHTML = '<div class="reader-empty compact-empty"><div class="reader-empty-icon">📰</div><h3>正在抓取</h3><p>先提取网页正文，再进入翻译步骤。</p></div>';
-  webpageOutput.innerHTML = '<div class="reader-empty compact-empty"><div class="reader-empty-icon">🌍</div><h3>正在翻译</h3><p>网页内容较长时会自动分段处理。</p></div>';
-  try {
-    const payload = await fetchJson(`${API_BASE}/webpage/translate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: webpageUrl.value.trim(),
-        direction: webpageDirection?.value || "en2zh",
-      }),
-    });
-    renderRichContent(webpageSource, `# ${payload.title}\n\n${payload.source_markdown}`, null);
-    renderRichContent(webpageOutput, `# ${payload.title}\n\n${payload.translated_markdown}`, null);
-    webpageMeta.textContent = [
-      payload.title,
-      `抓取 ${formatDuration(payload.fetch_seconds)}`,
-      `翻译 ${formatDuration(payload.translation_seconds)}`,
-      `总耗时 ${formatDuration(payload.total_seconds)}`,
-      payload.ssl_fallback_used ? "已自动兼容证书异常站点" : "",
-    ]
-      .filter(Boolean)
-      .join(" · ");
-  } catch (error) {
-    webpageMeta.textContent = `请求失败: ${error.message}`;
-    webpageSource.innerHTML = `<div class="plain-output">请求失败: ${escapeHtml(error.message)}</div>`;
-    webpageOutput.innerHTML = `<div class="plain-output">请求失败: ${escapeHtml(error.message)}</div>`;
-  } finally {
-    webpageButton.disabled = false;
-    webpageButton.textContent = "抓取并翻译";
-  }
-});
-
 ocrFile.addEventListener("change", () => {
   const file = ocrFile.files?.[0];
   ocrMeta.textContent = file
@@ -1153,7 +1106,7 @@ const initialTaskId = searchParams.get("task");
 const initialDocName = searchParams.get("doc");
 const initialModule = searchParams.get("module");
 
-if (initialModule && ["reader", "ocr", "translate", "webpage"].includes(initialModule)) {
+if (initialModule && ["reader", "ocr", "translate"].includes(initialModule)) {
   setModule(initialModule);
 }
 

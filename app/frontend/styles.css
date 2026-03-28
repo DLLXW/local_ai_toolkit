@@ -714,16 +714,6 @@ button {
   align-items: stretch;
 }
 
-.compact-actions {
-  margin-top: 14px;
-}
-
-.webpage-result-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
-}
-
 textarea,
 select,
 input[type="file"] {
