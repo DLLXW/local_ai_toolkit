@@ -140,10 +140,20 @@ function renderFilters(items) {
   taskFilters.innerHTML = getFolderGroups(items)
     .map(
       (group) => `
-        <button class="task-filter${group.id === currentFilter ? " active" : ""}" type="button" data-filter="${escapeHtml(group.id)}">
-          <span>${escapeHtml(group.label)}</span>
-          <span class="task-filter-count">${group.count}</span>
-        </button>
+        <div class="task-filter-row${group.id === currentFilter ? " active" : ""}">
+          <button class="task-filter task-filter-main${group.id === currentFilter ? " active" : ""}" type="button" data-filter="${escapeHtml(group.id)}">
+            <span class="task-filter-label">${escapeHtml(group.label)}</span>
+            <span class="task-filter-count">${group.count}</span>
+          </button>
+          ${
+            group.id !== "all" && group.id !== "未分类"
+              ? `
+                <button class="folder-tool" type="button" data-rename-folder="${escapeHtml(group.id)}" aria-label="重命名文件夹">✎</button>
+                <button class="folder-tool danger" type="button" data-delete-folder="${escapeHtml(group.id)}" aria-label="删除文件夹">✕</button>
+              `
+              : ""
+          }
+        </div>
       `,
     )
     .join("");
@@ -228,6 +238,30 @@ async function updateTaskMetadata(taskId, changes) {
   });
   if (currentTaskId === taskId) {
     renderTaskStatus(payload.task);
+  }
+  await refreshTasks();
+}
+
+async function renameFolder(oldName, newName) {
+  await fetchJson(`${API_BASE}/folder/rename`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ old_name: oldName, new_name: newName }),
+  });
+  if (currentFilter === oldName) {
+    currentFilter = newName;
+  }
+  await refreshTasks();
+}
+
+async function deleteFolder(folderName) {
+  await fetchJson(`${API_BASE}/folder/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: folderName }),
+  });
+  if (currentFilter === folderName) {
+    currentFilter = "all";
   }
   await refreshTasks();
 }
@@ -989,6 +1023,27 @@ taskList.addEventListener("change", async (event) => {
 taskFilters.addEventListener("click", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
+
+  const renameFolderName = target.dataset.renameFolder;
+  if (renameFolderName) {
+    const nextName = window.prompt("输入新的文件夹名称", renameFolderName);
+    if (nextName === null) return;
+    renameFolder(renameFolderName, nextName).catch((error) => {
+      taskMeta.textContent = `文件夹重命名失败: ${error.message}`;
+    });
+    return;
+  }
+
+  const deleteFolderName = target.dataset.deleteFolder;
+  if (deleteFolderName) {
+    const confirmed = window.confirm(`删除文件夹“${deleteFolderName}”后，里面的文献会移到“未分类”。继续吗？`);
+    if (!confirmed) return;
+    deleteFolder(deleteFolderName).catch((error) => {
+      taskMeta.textContent = `文件夹删除失败: ${error.message}`;
+    });
+    return;
+  }
+
   const button = target.closest("[data-filter]");
   if (!(button instanceof HTMLElement)) return;
   currentFilter = button.dataset.filter || "all";

@@ -74,6 +74,32 @@ class TaskStore:
         self._write(kept)
         return True
 
+    def rename_folder(self, old_name: str, new_name: str) -> int:
+        items = self._read()
+        renamed = 0
+        for item in items:
+            if (item.get("folder_name") or "未分类") != old_name:
+                continue
+            item["folder_name"] = new_name
+            item["updated_at"] = utc_now().isoformat()
+            renamed += 1
+        if renamed:
+            self._write(items)
+        return renamed
+
+    def clear_folder(self, folder_name: str, fallback_folder: str = "未分类") -> int:
+        items = self._read()
+        updated = 0
+        for item in items:
+            if (item.get("folder_name") or "未分类") != folder_name:
+                continue
+            item["folder_name"] = fallback_folder
+            item["updated_at"] = utc_now().isoformat()
+            updated += 1
+        if updated:
+            self._write(items)
+        return updated
+
     def _read(self) -> list[dict]:
         try:
             return json.loads(self.tasks_file.read_text(encoding="utf-8"))

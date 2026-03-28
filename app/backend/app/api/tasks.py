@@ -14,7 +14,7 @@ from app.schemas.document import (
     UrlUploadRequest,
 )
 from app.schemas.task import TaskDetailResponse, TaskListResponse
-from app.schemas.task import TaskUpdateRequest
+from app.schemas.task import FolderRenameRequest, FolderUpdateRequest, TaskUpdateRequest
 from app.services.task_manager import TaskManager
 from app.services.task_store import TaskStore
 
@@ -117,6 +117,11 @@ def _extract_arxiv_title(html: str) -> str | None:
     return None
 
 
+def _clean_folder_name(value: str | None, fallback: str = "未分类") -> str:
+    folder_name = re.sub(r"\s+", " ", (value or "").strip())
+    return folder_name or fallback
+
+
 @router.get("/tasks", response_model=TaskListResponse)
 async def list_tasks(settings: Settings = Depends(get_settings)) -> TaskListResponse:
     store = TaskStore(settings.tasks_file)
@@ -211,7 +216,7 @@ async def update_task(
             raise HTTPException(status_code=400, detail="Title cannot be empty")
         changes["title"] = title
     if payload.folder_name is not None:
-        folder_name = _clean_display_title(payload.folder_name, "未分类")
+        folder_name = _clean_folder_name(payload.folder_name)
         changes["folder_name"] = folder_name
 
     if not changes:
@@ -223,6 +228,41 @@ async def update_task(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Task not found") from exc
     return TaskDetailResponse(task=task)
+
+
+@router.patch("/folder/rename")
+async def rename_folder(
+    payload: FolderRenameRequest,
+    settings: Settings = Depends(get_settings),
+) -> dict[str, object]:
+    old_name = _clean_folder_name(payload.old_name)
+    new_name = _clean_folder_name(payload.new_name)
+    if old_name == "未分类":
+        raise HTTPException(status_code=400, detail="Default folder cannot be renamed")
+    if old_name == new_name:
+        raise HTTPException(status_code=400, detail="Folder name is unchanged")
+
+    store = TaskStore(settings.tasks_file)
+    renamed = store.rename_folder(old_name, new_name)
+    if not renamed:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    return {"ok": True, "renamed": renamed, "folder_name": new_name}
+
+
+@router.post("/folder/delete")
+async def delete_folder(
+    payload: FolderUpdateRequest,
+    settings: Settings = Depends(get_settings),
+) -> dict[str, object]:
+    folder_name = _clean_folder_name(payload.name)
+    if folder_name == "未分类":
+        raise HTTPException(status_code=400, detail="Default folder cannot be deleted")
+
+    store = TaskStore(settings.tasks_file)
+    updated = store.clear_folder(folder_name)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    return {"ok": True, "moved": updated, "folder_name": folder_name, "fallback_folder": "未分类"}
 
 
 @router.get("/result/{doc_name}", response_model=DocumentResultResponse)

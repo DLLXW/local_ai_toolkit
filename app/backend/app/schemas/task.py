@@ -37,3 +37,12 @@ class TaskDetailResponse(BaseModel):
 class TaskUpdateRequest(BaseModel):
     title: str | None = None
     folder_name: str | None = None
+
+
+class FolderUpdateRequest(BaseModel):
+    name: str
+
+
+class FolderRenameRequest(BaseModel):
+    old_name: str
+    new_name: str

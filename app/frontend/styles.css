@@ -296,13 +296,54 @@ button {
 
 .task-filters {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  max-height: 250px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.task-filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
 }
 
 .task-filter {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  width: 100%;
+}
+
+.task-filter-main {
+  padding: 8px 12px;
+  min-height: 44px;
+  border-radius: 18px;
+}
+
+.task-filter-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-tool {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.folder-tool.danger {
+  color: var(--danger);
 }
 
 .task-filter.active,
