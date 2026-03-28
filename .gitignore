@@ -1,11 +1,14 @@
 .DS_Store
 __pycache__/
 *.py[cod]
+.cursorignore
 
 glm-ocr/
 glm-ocr-mlx-server/
+hy-mt/
 
 .env
+.env.*
 app/.venv/
 app/backend/.venv/
 app/backend/.env
@@ -15,3 +18,5 @@ app/data/outputs/
 app/data/tasks.json
 app/frontend/node_modules/
 app/frontend/dist/
+*.log
+项目复刻蓝图.md
