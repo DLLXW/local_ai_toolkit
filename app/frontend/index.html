@@ -144,8 +144,16 @@
                 <div id="ocrMeta" class="hint-inline">支持图片和 PDF，识别完成后将在右侧展示 markdown 渲染结果。</div>
               </div>
               <div class="single-tool-output">
-                <div class="section-kicker">Preview</div>
-                <h2>识别结果</h2>
+                <div class="result-head">
+                  <div>
+                    <div class="section-kicker">Preview</div>
+                    <h2>识别结果</h2>
+                  </div>
+                  <div class="result-toolbar">
+                    <button id="copyOcrMarkdownButton" class="icon-button copy-button" type="button" disabled>复制 Markdown</button>
+                    <button id="copyOcrHtmlButton" class="icon-button copy-button" type="button" disabled>复制 HTML</button>
+                  </div>
+                </div>
                 <div id="ocrOutput" class="reader-surface tool-surface">
                   <div class="reader-empty compact-empty">
                     <div class="reader-empty-icon">🔎</div>

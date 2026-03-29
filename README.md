@@ -123,6 +123,21 @@
 ./start-hy-mt.sh
 ```
 
+如果你已经把依赖和模型都准备好了，也可以直接一键启动全部服务：
+
+```bash
+./start-all.sh
+```
+
+这个脚本会在后台拉起 OCR、翻译服务、后端、前端，并把日志写到 `./.runtime/logs/`。
+常用辅助命令：
+
+```bash
+./start-all.sh status
+./start-all.sh stop
+./start-all.sh restart
+```
+
 这两个脚本已经尽量做成了通用形式，但你仍然需要根据自己的本地模型路径调整环境变量，例如：
 
 - `SERVER_DIR`

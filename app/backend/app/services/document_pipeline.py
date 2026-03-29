@@ -1,7 +1,5 @@
 import json
 import re
-import shutil
-import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +8,7 @@ from typing import Callable
 import httpx
 
 from app.core.settings import Settings
+from app.services.glmocr_service import GLMOCRService
 
 
 UpdateCallback = Callable[[dict], None]
@@ -33,7 +32,7 @@ class DocumentPipeline:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.root_dir = Path(__file__).resolve().parents[4]
-        self.glmocr_cli = self.root_dir / "glm-ocr" / ".venv" / "bin" / "glmocr"
+        self.glmocr = GLMOCRService()
 
     def run(
         self,
@@ -49,13 +48,10 @@ class DocumentPipeline:
 
         self._emit(update, status="running", progress=0.1, step="ocr_running")
         ocr_started_at = time.perf_counter()
-        self._run_glmocr(input_path=input_path, output_dir=output_dir)
+        english_markdown, ocr_json = self.glmocr.parse(input_path=input_path, output_dir=output_dir)
         ocr_seconds = round(time.perf_counter() - ocr_started_at, 2)
 
         self._emit(update, status="running", progress=0.45, step="ocr_loaded")
-        english_markdown = self._read_output_file(output_dir, ".md")
-        ocr_json = json.loads(self._read_output_file(output_dir, ".json"))
-        self._sync_assets(output_dir)
 
         self._emit(update, status="running", progress=0.55, step="translation_running")
         translation_started_at = time.perf_counter()
@@ -98,19 +94,6 @@ class DocumentPipeline:
             ocr_seconds=ocr_seconds,
             translation_seconds=translation_seconds,
             total_seconds=round(time.perf_counter() - pipeline_started_at, 2),
-        )
-
-    def _run_glmocr(self, *, input_path: Path, output_dir: Path) -> None:
-        if not self.glmocr_cli.exists():
-            raise FileNotFoundError(f"GLM-OCR CLI not found: {self.glmocr_cli}")
-
-        cmd = [str(self.glmocr_cli), "parse", str(input_path), "--output", str(output_dir)]
-        subprocess.run(
-            cmd,
-            cwd=self.root_dir / "glm-ocr",
-            check=True,
-            capture_output=True,
-            text=True,
         )
 
     def _translate_segments(self, segments: list[dict]) -> list[dict]:
@@ -405,21 +388,6 @@ class DocumentPipeline:
         if current:
             parts.append(current)
         return parts
-
-    def _read_output_file(self, output_dir: Path, suffix: str) -> str:
-        candidates = sorted(output_dir.rglob(f"*{suffix}"))
-        if not candidates:
-            raise FileNotFoundError(f"No {suffix} file found in {output_dir}")
-        return candidates[0].read_text(encoding="utf-8")
-
-    def _sync_assets(self, output_dir: Path) -> None:
-        nested_dirs = [path.parent for path in output_dir.rglob("*.md") if path.parent != output_dir]
-        for nested_dir in nested_dirs:
-            for folder_name in ("imgs", "layout_vis"):
-                src_dir = nested_dir / folder_name
-                dst_dir = output_dir / folder_name
-                if src_dir.exists() and src_dir.is_dir():
-                    shutil.copytree(src_dir, dst_dir, dirs_exist_ok=True)
 
     @staticmethod
     def _render_bilingual_segment(segment: dict) -> str:

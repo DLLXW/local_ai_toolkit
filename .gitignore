@@ -20,3 +20,5 @@ app/frontend/node_modules/
 app/frontend/dist/
 *.log
 项目复刻蓝图.md
+.vscode
+.runtime

@@ -245,6 +245,13 @@ button {
   gap: 18px;
 }
 
+.result-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
 .workspace-head h1,
 .reader-head h2,
 .rail-head h2,
@@ -290,8 +297,27 @@ button {
 }
 
 .icon-button {
-  width: 36px;
-  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+.result-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.copy-button {
+  width: auto;
+  height: auto;
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+
+.copy-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .task-filters {
@@ -895,6 +921,7 @@ textarea {
 
   .workspace-head,
   .reader-head,
+  .result-head,
   .rail-head,
   .composer-toolbar,
   .task-status-grid {

@@ -34,6 +34,8 @@ const ocrFile = document.querySelector("#ocrFile");
 const ocrButton = document.querySelector("#ocrButton");
 const ocrOutput = document.querySelector("#ocrOutput");
 const ocrMeta = document.querySelector("#ocrMeta");
+const copyOcrMarkdownButton = document.querySelector("#copyOcrMarkdownButton");
+const copyOcrHtmlButton = document.querySelector("#copyOcrHtmlButton");
 const docFile = document.querySelector("#docFile");
 const paperUrl = document.querySelector("#paperUrl");
 const docButton = document.querySelector("#docButton");
@@ -59,6 +61,7 @@ let isUploadingDocument = false;
 let isFocusMode = false;
 let currentDocSource = "file";
 let latestTaskStats = null;
+let latestOCRPayload = null;
 const searchParams = new URLSearchParams(window.location.search);
 
 async function fetchJson(url, options) {
@@ -347,24 +350,35 @@ function restoreMathBlocks(html, placeholders) {
   return restored;
 }
 
+function getAssetRootUrl(result) {
+  if (result?.asset_base_url) {
+    return `${BACKEND_ORIGIN}${result.asset_base_url}`;
+  }
+
+  const docName = result?.doc_name || result?.raw_response?.doc_name;
+  if (!docName) return "";
+  return `${BACKEND_ORIGIN}/static/outputs/${encodeURIComponent(docName)}`;
+}
+
 function normalizeAssetPaths(html, result) {
-  const assetBaseUrl = result?.asset_base_url
-    ? `${BACKEND_ORIGIN}${result.asset_base_url}`
-    : result?.doc_name
-      ? `${BACKEND_ORIGIN}/static/outputs/${encodeURIComponent(result.doc_name)}/imgs`
-      : "";
+  const assetRootUrl = getAssetRootUrl(result);
+  if (!assetRootUrl) return html;
 
-  if (!assetBaseUrl) return html;
+  const parser = new DOMParser();
+  const documentNode = parser.parseFromString(`<div>${html}</div>`, "text/html");
+  const rewriteAttribute = (selector, attribute) => {
+    for (const node of documentNode.querySelectorAll(selector)) {
+      const value = node.getAttribute(attribute);
+      if (!value || /^(https?:|data:|blob:|#|mailto:|tel:)/i.test(value)) continue;
 
-  return html
-    .replaceAll('src="imgs/', `src="${assetBaseUrl}/`)
-    .replaceAll("src='imgs/", `src='${assetBaseUrl}/`)
-    .replaceAll('src="./imgs/', `src="${assetBaseUrl}/`)
-    .replaceAll("src='./imgs/", `src='${assetBaseUrl}/`)
-    .replaceAll('href="imgs/', `href="${assetBaseUrl}/`)
-    .replaceAll("href='imgs/", `href='${assetBaseUrl}/`)
-    .replaceAll('href="./imgs/', `href="${assetBaseUrl}/`)
-    .replaceAll("href='./imgs/", `href='${assetBaseUrl}/`);
+      const normalized = value.replace(/^\.?\//, "");
+      node.setAttribute(attribute, `${assetRootUrl}/${normalized}`);
+    }
+  };
+
+  rewriteAttribute("img[src]", "src");
+  rewriteAttribute("a[href]", "href");
+  return documentNode.body.firstElementChild?.innerHTML || html;
 }
 
 function renderMarkdownToHtml(markdown, result) {
@@ -377,6 +391,28 @@ function renderMarkdownToHtml(markdown, result) {
 function renderRichContent(container, markdown, result) {
   container.innerHTML = `<div class="rendered-doc">${renderMarkdownToHtml(markdown, result)}</div>`;
   renderMath(container);
+}
+
+function setOCRCopyButtonsEnabled(enabled) {
+  copyOcrMarkdownButton.disabled = !enabled;
+  copyOcrHtmlButton.disabled = !enabled;
+}
+
+async function copyText(text, button, successLabel) {
+  if (!text) return;
+  const original = button.textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    button.textContent = successLabel;
+    window.setTimeout(() => {
+      button.textContent = original;
+    }, 1400);
+  } catch (error) {
+    button.textContent = "复制失败";
+    window.setTimeout(() => {
+      button.textContent = original;
+    }, 1400);
+  }
 }
 
 function splitMarkdownBlocks(markdown) {
@@ -823,6 +859,8 @@ translateButton.addEventListener("click", async () => {
 
 ocrFile.addEventListener("change", () => {
   const file = ocrFile.files?.[0];
+  latestOCRPayload = null;
+  setOCRCopyButtonsEnabled(false);
   ocrMeta.textContent = file
     ? `已选择 ${file.name}，点击“开始 OCR”发起识别。`
     : "支持图片和 PDF，识别完成后将在右侧展示 markdown 渲染结果。";
@@ -835,6 +873,7 @@ ocrButton.addEventListener("click", async () => {
   }
 
   ocrButton.disabled = true;
+  setOCRCopyButtonsEnabled(false);
   ocrButton.textContent = "识别中...";
   ocrOutput.innerHTML = '<div class="reader-empty compact-empty"><div class="reader-empty-icon">🔎</div><h3>正在识别</h3><p>OCR 处理中，请稍候。</p></div>';
   const formData = new FormData();
@@ -844,14 +883,27 @@ ocrButton.addEventListener("click", async () => {
       method: "POST",
       body: formData,
     });
-    renderRichContent(ocrOutput, payload.markdown, null);
+    latestOCRPayload = payload;
+    renderRichContent(ocrOutput, payload.markdown, payload);
+    setOCRCopyButtonsEnabled(true);
     ocrMeta.textContent = `识别完成：${ocrFile.files[0].name} · 耗时 ${formatDuration(payload.elapsed_seconds)}`;
   } catch (error) {
+    latestOCRPayload = null;
+    setOCRCopyButtonsEnabled(false);
     ocrOutput.innerHTML = `<div class="plain-output">请求失败: ${escapeHtml(error.message)}</div>`;
   } finally {
     ocrButton.disabled = false;
     ocrButton.textContent = "开始 OCR";
   }
+});
+
+copyOcrMarkdownButton?.addEventListener("click", async () => {
+  await copyText(latestOCRPayload?.markdown || "", copyOcrMarkdownButton, "已复制 Markdown");
+});
+
+copyOcrHtmlButton?.addEventListener("click", async () => {
+  const html = ocrOutput.querySelector(".rendered-doc")?.innerHTML || "";
+  await copyText(html, copyOcrHtmlButton, "已复制 HTML");
 });
 
 docFile.addEventListener("change", updateSelectedDocumentState);
