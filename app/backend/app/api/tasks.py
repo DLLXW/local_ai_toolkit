@@ -17,6 +17,7 @@ from app.schemas.task import TaskDetailResponse, TaskListResponse
 from app.schemas.task import FolderRenameRequest, FolderUpdateRequest, TaskUpdateRequest
 from app.services.task_manager import TaskManager
 from app.services.task_store import TaskStore
+from app.services.image_conversion import ImageConversionError, prepare_image_for_ocr
 
 
 router = APIRouter(tags=["tasks"])
@@ -149,14 +150,28 @@ async def upload_document(
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
-    input_path = settings.uploads_dir / f"{uuid4()}-{Path(file.filename).name}"
+    try:
+        if "pdf" not in (file.content_type or "").lower() and not file.filename.lower().endswith(".pdf"):
+            file_bytes, _, input_filename = prepare_image_for_ocr(
+                file_bytes=file_bytes,
+                content_type=file.content_type or "",
+                filename=file.filename,
+                scratch_dir=settings.uploads_dir,
+                max_side=settings.ocr_max_image_side,
+            )
+        else:
+            input_filename = file.filename
+    except ImageConversionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    input_path = settings.uploads_dir / f"{uuid4()}-{Path(input_filename).name}"
     input_path.write_bytes(file_bytes)
 
-    doc_name = Path(file.filename).stem
+    doc_name = Path(input_filename).stem
     return _create_document_task(
         settings=settings,
         input_path=input_path,
-        input_filename=file.filename,
+        input_filename=input_filename,
         doc_name=doc_name,
         title=_clean_display_title(doc_name, doc_name),
     )

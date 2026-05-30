@@ -320,6 +320,11 @@ button {
   cursor: not-allowed;
 }
 
+input[type="file"]:disabled {
+  opacity: 0.62;
+  cursor: wait;
+}
+
 .task-filters {
   display: grid;
   gap: 8px;
@@ -678,6 +683,60 @@ button {
 
 .tool-surface {
   min-height: 420px;
+}
+
+.ocr-batch-list {
+  display: grid;
+  gap: 18px;
+}
+
+.ocr-result-card {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(249, 250, 255, 0.94);
+  overflow: hidden;
+}
+
+.ocr-result-card.done {
+  border-color: rgba(52, 182, 134, 0.22);
+}
+
+.ocr-result-card.failed {
+  border-color: rgba(205, 110, 88, 0.22);
+}
+
+.ocr-result-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ocr-result-title {
+  margin: 4px 0 0;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.ocr-result-meta {
+  margin-top: 6px;
+}
+
+.ocr-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.ocr-result-body {
+  padding: 18px;
+}
+
+.inline-empty {
+  min-height: 180px;
 }
 
 .reader-empty {

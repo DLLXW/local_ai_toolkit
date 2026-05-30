@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     ocr_base_url: str = "http://127.0.0.1:8080"
     ocr_chat_path: str = "/chat/completions"
     ocr_model: str = "mlx-community/GLM-OCR-bf16"
-    ocr_timeout_seconds: float = 180.0
+    ocr_timeout_seconds: float = 600.0
+    ocr_max_image_side: int = 2048
     ocr_prompt: str = (
         "Recognize the text in the image and output in Markdown format. "
         "Preserve headings, paragraphs, tables, and formulas."

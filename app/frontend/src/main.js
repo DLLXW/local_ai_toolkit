@@ -61,7 +61,8 @@ let isUploadingDocument = false;
 let isFocusMode = false;
 let currentDocSource = "file";
 let latestTaskStats = null;
-let latestOCRPayload = null;
+let latestOCRResults = [];
+let isOCRRunning = false;
 const searchParams = new URLSearchParams(window.location.search);
 
 async function fetchJson(url, options) {
@@ -396,6 +397,78 @@ function renderRichContent(container, markdown, result) {
 function setOCRCopyButtonsEnabled(enabled) {
   copyOcrMarkdownButton.disabled = !enabled;
   copyOcrHtmlButton.disabled = !enabled;
+}
+
+function getSelectedOCRFiles() {
+  return [...(ocrFile.files || [])];
+}
+
+function getCompletedOCRResults() {
+  return latestOCRResults.filter((item) => item.status === "done" && item.payload?.markdown);
+}
+
+function getOCRStatusLabel(status) {
+  return (
+    {
+      queued: "排队中",
+      running: "识别中",
+      done: "已完成",
+      failed: "失败",
+    }[status] || status
+  );
+}
+
+function renderOCRResults() {
+  const completed = getCompletedOCRResults();
+  setOCRCopyButtonsEnabled(completed.length > 0);
+
+  if (!latestOCRResults.length) {
+    ocrOutput.innerHTML = `
+      <div class="reader-empty compact-empty">
+        <div class="reader-empty-icon">🔎</div>
+        <h3>等待识别</h3>
+        <p>选择一个或多个文件后，这里会按文件保留 OCR 输出。</p>
+      </div>
+    `;
+    return;
+  }
+
+  ocrOutput.innerHTML = `
+    <div class="ocr-batch-list">
+      ${latestOCRResults
+        .map((item, index) => {
+          const statusClass = item.status === "done" ? "done" : item.status === "failed" ? "failed" : "running";
+          const content =
+            item.status === "done"
+              ? `<div class="rendered-doc">${renderMarkdownToHtml(item.payload.markdown, item.payload)}</div>`
+              : item.status === "failed"
+                ? `<div class="plain-output">请求失败: ${escapeHtml(item.error || "unknown error")}</div>`
+                : `<div class="reader-empty compact-empty inline-empty"><div class="reader-empty-icon">🔎</div><h3>${escapeHtml(getOCRStatusLabel(item.status))}</h3><p>${item.status === "queued" ? "等待前面的文件处理完成。" : "OCR 处理中，请稍候。"}</p></div>`;
+
+          return `
+            <article class="ocr-result-card ${statusClass}" data-ocr-result-id="${escapeHtml(item.id)}">
+              <div class="ocr-result-head">
+                <div>
+                  <div class="section-kicker">File ${index + 1}</div>
+                  <h3 class="ocr-result-title">${escapeHtml(item.fileName)}</h3>
+                  <div class="hint-inline ocr-result-meta">
+                    ${escapeHtml(getOCRStatusLabel(item.status))}
+                    ${item.payload?.elapsed_seconds ? ` · 耗时 ${formatDuration(item.payload.elapsed_seconds)}` : ""}
+                  </div>
+                </div>
+                <div class="ocr-result-actions">
+                  <button class="icon-button copy-button" type="button" data-copy-ocr-markdown="${escapeHtml(item.id)}" ${item.status === "done" ? "" : "disabled"}>复制 Markdown</button>
+                  <button class="icon-button copy-button" type="button" data-copy-ocr-html="${escapeHtml(item.id)}" ${item.status === "done" ? "" : "disabled"}>复制 HTML</button>
+                </div>
+              </div>
+              <div class="ocr-result-body">${content}</div>
+            </article>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+  renderMath(ocrOutput);
 }
 
 async function copyText(text, button, successLabel) {
@@ -785,7 +858,7 @@ function updateSelectedDocumentState() {
   if (!file) {
     dropzoneCard?.classList.remove("has-file");
     docDropzoneTitle.textContent = "拖拽文档到这里，或点击上方按钮选择";
-    docDropzoneNote.textContent = "支持 PDF、PNG、JPG、JPEG。上传后会自动进入 OCR 与翻译流程。";
+    docDropzoneNote.textContent = "支持 PDF、PNG、JPG、JPEG、HEIC。上传后会自动进入 OCR 与翻译流程。";
     return;
   }
 
@@ -858,52 +931,107 @@ translateButton.addEventListener("click", async () => {
 });
 
 ocrFile.addEventListener("change", () => {
-  const file = ocrFile.files?.[0];
-  latestOCRPayload = null;
-  setOCRCopyButtonsEnabled(false);
-  ocrMeta.textContent = file
-    ? `已选择 ${file.name}，点击“开始 OCR”发起识别。`
-    : "支持图片和 PDF，识别完成后将在右侧展示 markdown 渲染结果。";
+  const files = getSelectedOCRFiles();
+  latestOCRResults = [];
+  renderOCRResults();
+  if (!files.length) {
+    ocrMeta.textContent = "支持多选图片和 PDF，系统会按顺序排队处理。";
+    return;
+  }
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  ocrMeta.textContent = `已选择 ${files.length} 个文件，共 ${(totalSize / 1024 / 1024).toFixed(2)} MB，点击“开始 OCR”按顺序识别。`;
 });
 
 ocrButton.addEventListener("click", async () => {
-  if (!ocrFile.files?.length) {
+  if (isOCRRunning) return;
+  const files = getSelectedOCRFiles();
+  if (!files.length) {
     ocrOutput.innerHTML = '<div class="plain-output">请先选择文件</div>';
     return;
   }
 
+  latestOCRResults = files.map((file, index) => ({
+    id: `${Date.now()}-${index}-${file.name}`,
+    file,
+    fileName: file.name,
+    status: "queued",
+    payload: null,
+    error: "",
+  }));
   ocrButton.disabled = true;
-  setOCRCopyButtonsEnabled(false);
-  ocrButton.textContent = "识别中...";
-  ocrOutput.innerHTML = '<div class="reader-empty compact-empty"><div class="reader-empty-icon">🔎</div><h3>正在识别</h3><p>OCR 处理中，请稍候。</p></div>';
-  const formData = new FormData();
-  formData.append("file", ocrFile.files[0]);
+  ocrFile.disabled = true;
+  isOCRRunning = true;
+  ocrButton.textContent = "队列处理中...";
+  renderOCRResults();
+
   try {
-    const payload = await fetchJson(`${API_BASE}/ocr`, {
-      method: "POST",
-      body: formData,
-    });
-    latestOCRPayload = payload;
-    renderRichContent(ocrOutput, payload.markdown, payload);
-    setOCRCopyButtonsEnabled(true);
-    ocrMeta.textContent = `识别完成：${ocrFile.files[0].name} · 耗时 ${formatDuration(payload.elapsed_seconds)}`;
-  } catch (error) {
-    latestOCRPayload = null;
-    setOCRCopyButtonsEnabled(false);
-    ocrOutput.innerHTML = `<div class="plain-output">请求失败: ${escapeHtml(error.message)}</div>`;
+    for (let index = 0; index < latestOCRResults.length; index += 1) {
+      const item = latestOCRResults[index];
+      item.status = "running";
+      ocrMeta.textContent = `正在识别 ${index + 1}/${latestOCRResults.length}: ${item.fileName}`;
+      renderOCRResults();
+
+      const formData = new FormData();
+      formData.append("file", item.file);
+      try {
+        item.payload = await fetchJson(`${API_BASE}/ocr`, {
+          method: "POST",
+          body: formData,
+        });
+        item.status = "done";
+      } catch (error) {
+        item.status = "failed";
+        item.error = error.message;
+      }
+      renderOCRResults();
+    }
+
+    const doneCount = getCompletedOCRResults().length;
+    const failedCount = latestOCRResults.filter((item) => item.status === "failed").length;
+    ocrMeta.textContent = `队列完成：成功 ${doneCount} 个，失败 ${failedCount} 个。`;
   } finally {
+    isOCRRunning = false;
     ocrButton.disabled = false;
+    ocrFile.disabled = false;
     ocrButton.textContent = "开始 OCR";
   }
 });
 
 copyOcrMarkdownButton?.addEventListener("click", async () => {
-  await copyText(latestOCRPayload?.markdown || "", copyOcrMarkdownButton, "已复制 Markdown");
+  const markdown = getCompletedOCRResults()
+    .map((item) => `# ${item.fileName}\n\n${item.payload.markdown}`)
+    .join("\n\n---\n\n");
+  await copyText(markdown, copyOcrMarkdownButton, "已复制全部 Markdown");
 });
 
 copyOcrHtmlButton?.addEventListener("click", async () => {
-  const html = ocrOutput.querySelector(".rendered-doc")?.innerHTML || "";
-  await copyText(html, copyOcrHtmlButton, "已复制 HTML");
+  const html = [...ocrOutput.querySelectorAll(".ocr-result-card.done")]
+    .map((card) => {
+      const title = card.querySelector(".ocr-result-title")?.textContent || "OCR Result";
+      const content = card.querySelector(".rendered-doc")?.innerHTML || "";
+      return `<h2>${escapeHtml(title)}</h2>\n${content}`;
+    })
+    .join("\n<hr>\n");
+  await copyText(html, copyOcrHtmlButton, "已复制全部 HTML");
+});
+
+ocrOutput.addEventListener("click", async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+
+  const markdownId = target.dataset.copyOcrMarkdown;
+  if (markdownId) {
+    const item = latestOCRResults.find((result) => result.id === markdownId);
+    await copyText(item?.payload?.markdown || "", target, "已复制 Markdown");
+    return;
+  }
+
+  const htmlId = target.dataset.copyOcrHtml;
+  if (htmlId) {
+    const card = target.closest(".ocr-result-card");
+    const html = card?.querySelector(".rendered-doc")?.innerHTML || "";
+    await copyText(html, target, "已复制 HTML");
+  }
 });
 
 docFile.addEventListener("change", updateSelectedDocumentState);

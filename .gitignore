@@ -22,3 +22,4 @@ app/frontend/dist/
 项目复刻蓝图.md
 .vscode
 .runtime
+.env

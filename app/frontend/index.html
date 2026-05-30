@@ -79,10 +79,10 @@
             <div class="composer-grid">
               <div class="source-panel active" data-source-panel="file">
                 <div class="dropzone-card">
-                  <input id="docFile" type="file" accept=".pdf,.png,.jpg,.jpeg" />
+                  <input id="docFile" type="file" accept=".pdf,.png,.jpg,.jpeg,.heic,.heif" />
                   <div class="dropzone-illustration">🗂</div>
                   <div id="docDropzoneTitle" class="dropzone-title">拖拽文档到这里，或点击上方按钮选择</div>
-                  <div id="docDropzoneNote" class="dropzone-note">支持 PDF、PNG、JPG、JPEG。上传后会自动进入 OCR 与翻译流程。</div>
+                  <div id="docDropzoneNote" class="dropzone-note">支持 PDF、PNG、JPG、JPEG、HEIC。上传后会自动进入 OCR 与翻译流程。</div>
                 </div>
               </div>
 
@@ -130,7 +130,7 @@
             <div>
               <div class="section-kicker">OCR Workspace</div>
               <h1>OCR 识别</h1>
-              <p class="hero-copy">上传单张图片或 PDF，提取结构化 markdown，并即时在下方预览识别结果。</p>
+              <p class="hero-copy">上传一张或一批图片/PDF，按队列提取结构化 markdown，并保留每个文件的识别结果。</p>
             </div>
           </header>
 
@@ -139,9 +139,9 @@
               <div class="single-tool-control">
                 <div class="section-kicker">Input</div>
                 <h2>上传素材</h2>
-                <input id="ocrFile" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf" />
+                <input id="ocrFile" type="file" accept=".png,.jpg,.jpeg,.webp,.heic,.heif,.pdf" multiple />
                 <button id="ocrButton" class="soft-button primary-action" type="button">开始 OCR</button>
-                <div id="ocrMeta" class="hint-inline">支持图片和 PDF，识别完成后将在右侧展示 markdown 渲染结果。</div>
+                <div id="ocrMeta" class="hint-inline">支持多选图片和 PDF，系统会按顺序排队处理。</div>
               </div>
               <div class="single-tool-output">
                 <div class="result-head">
@@ -150,15 +150,15 @@
                     <h2>识别结果</h2>
                   </div>
                   <div class="result-toolbar">
-                    <button id="copyOcrMarkdownButton" class="icon-button copy-button" type="button" disabled>复制 Markdown</button>
-                    <button id="copyOcrHtmlButton" class="icon-button copy-button" type="button" disabled>复制 HTML</button>
+                    <button id="copyOcrMarkdownButton" class="icon-button copy-button" type="button" disabled>复制全部 Markdown</button>
+                    <button id="copyOcrHtmlButton" class="icon-button copy-button" type="button" disabled>复制全部 HTML</button>
                   </div>
                 </div>
                 <div id="ocrOutput" class="reader-surface tool-surface">
                   <div class="reader-empty compact-empty">
                     <div class="reader-empty-icon">🔎</div>
                     <h3>等待识别</h3>
-                    <p>上传一个文件后，这里会展示 OCR 输出。</p>
+                    <p>选择一个或多个文件后，这里会按文件保留 OCR 输出。</p>
                   </div>
                 </div>
               </div>

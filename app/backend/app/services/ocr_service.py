@@ -1,5 +1,6 @@
 import base64
 import json
+import socket
 import time
 import urllib.request
 from pathlib import Path
@@ -8,6 +9,11 @@ from uuid import uuid4
 from app.core.settings import Settings
 from app.schemas.ocr import OCRResponse
 from app.services.glmocr_service import GLMOCRService
+from app.services.image_conversion import prepare_image_for_ocr
+
+
+class OCRTimeoutError(TimeoutError):
+    pass
 
 
 class OCRService:
@@ -41,6 +47,13 @@ class OCRService:
         if self._is_pdf(content_type=content_type, filename=filename):
             return self._recognize_pdf_sync(file_bytes=file_bytes, filename=filename)
 
+        file_bytes, content_type, filename = prepare_image_for_ocr(
+            file_bytes=file_bytes,
+            content_type=content_type,
+            filename=filename,
+            scratch_dir=self.settings.uploads_dir,
+            max_side=self.settings.ocr_max_image_side,
+        )
         started_at = time.perf_counter()
         mime = content_type or self._guess_mime(filename)
         encoded = base64.b64encode(file_bytes).decode("utf-8")
@@ -66,8 +79,14 @@ class OCRService:
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(request, timeout=self.settings.ocr_timeout_seconds) as response:
-            raw_response = json.loads(response.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(request, timeout=self.settings.ocr_timeout_seconds) as response:
+                raw_response = json.loads(response.read().decode("utf-8"))
+        except (TimeoutError, socket.timeout) as exc:
+            raise OCRTimeoutError(
+                f"OCR model did not finish within {self.settings.ocr_timeout_seconds:.0f} seconds. "
+                "Try again, or use the document reader upload for slower files."
+            ) from exc
 
         content = self._extract_content(raw_response)
         return OCRResponse(

@@ -4,7 +4,9 @@ from app.core.settings import Settings, get_settings
 from app.schemas.translate import TranslateRequest, TranslateResponse
 from app.schemas.ocr import OCRResponse
 from app.services.ocr_service import OCRService
+from app.services.ocr_service import OCRTimeoutError
 from app.services.translate_service import TranslateService
+from app.services.image_conversion import ImageConversionError
 
 
 router = APIRouter(tags=["tools"])
@@ -29,6 +31,10 @@ async def run_ocr(
             content_type=file.content_type or "",
             filename=file.filename,
         )
+    except ImageConversionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OCRTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"OCR request failed: {exc}") from exc
 
